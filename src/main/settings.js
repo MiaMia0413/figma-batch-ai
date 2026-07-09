@@ -1,0 +1,35 @@
+export const STORAGE_KEY = 'figma-batch-ai-settings-v1';
+
+export const DEFAULT_SETTINGS = {
+  endpoint: 'https://api.openai.com/v1',
+  model: 'gpt-4o-mini',
+  apiKey: '',
+};
+
+export async function getSettings() {
+  return normalizeSettings(await figma.clientStorage.getAsync(STORAGE_KEY));
+}
+
+export async function saveSettings(args) {
+  const next = normalizeSettings(args);
+
+  if (!next.endpoint || !/^https:\/\//i.test(next.endpoint)) {
+    throw new Error('Endpoint 必须以 https:// 开头。');
+  }
+  if (!next.model) throw new Error('请填写模型名称。');
+
+  await figma.clientStorage.setAsync(STORAGE_KEY, next);
+  return {
+    endpoint: next.endpoint,
+    model: next.model,
+    hasApiKey: Boolean(next.apiKey),
+  };
+}
+
+function normalizeSettings(value) {
+  return {
+    endpoint: String(value?.endpoint || DEFAULT_SETTINGS.endpoint).trim(),
+    model: String(value?.model || DEFAULT_SETTINGS.model).trim(),
+    apiKey: String(value?.apiKey || DEFAULT_SETTINGS.apiKey).trim(),
+  };
+}

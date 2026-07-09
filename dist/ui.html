@@ -1,0 +1,1688 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Figma Batch AI</title>
+    <style>
+      :root {
+  color-scheme: light dark;
+  --bg: var(--figma-color-bg, #ffffff);
+  --panel: var(--figma-color-bg-secondary, #f6f7f9);
+  --text: var(--figma-color-text, #111827);
+  --muted: var(--figma-color-text-secondary, #6b7280);
+  --border: var(--figma-color-border, #d9dce3);
+  --brand: #2563eb;
+  --brand-text: #ffffff;
+  --danger: #dc2626;
+  --radius: 8px;
+  --composer-control-height: 56px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font: 12px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.app {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100vh;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.title {
+  min-width: 0;
+}
+
+.title h1 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.title p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.icon-button {
+  width: 30px;
+  height: 30px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.icon-button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon-button:hover {
+  border-color: var(--brand);
+}
+
+.messages {
+  overflow: auto;
+  padding: 12px;
+}
+
+.message {
+  margin: 0 0 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message.user {
+  background: color-mix(in srgb, var(--brand) 12%, var(--bg));
+  border-color: color-mix(in srgb, var(--brand) 35%, var(--border));
+}
+
+.message.tool {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
+.composer {
+  position: relative;
+  padding: 10px;
+  border-top: 1px solid transparent;
+  background: var(--bg);
+}
+
+.composer.quick-actions-open {
+  border-top-color: var(--border);
+}
+
+.quick-actions {
+  position: relative;
+  min-height: 0;
+  padding: 0;
+}
+
+.quick-actions-toggle {
+  position: absolute;
+  z-index: 2;
+  top: -19px;
+  left: 50%;
+  width: 28px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--muted);
+  padding: 0;
+  cursor: pointer;
+  transform: translateX(-50%);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.14);
+}
+
+.quick-actions-toggle:hover {
+  border-color: var(--brand);
+  color: var(--text);
+}
+
+.quick-actions-arrow {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transform: rotate(0deg);
+  transition: transform 0.16s ease;
+}
+
+.quick-actions-toggle.open .quick-actions-arrow {
+  transform: rotate(180deg);
+}
+
+.quick-actions-list {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 0 0 8px;
+}
+
+.quick-actions-list[hidden] {
+  display: none;
+}
+
+.chip {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 5px 8px;
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--brand);
+}
+
+.input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.composer-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  align-items: stretch;
+}
+
+textarea {
+  width: 100%;
+  min-height: var(--composer-control-height);
+  max-height: 140px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  padding: 8px;
+}
+
+.primary {
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--brand);
+  color: var(--brand-text);
+  padding: 9px 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.run-toggle {
+  min-width: 54px;
+  min-height: var(--composer-control-height);
+  height: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+}
+
+.primary.danger {
+  background: var(--danger);
+}
+
+textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.settings {
+  position: fixed;
+  inset: 0;
+  display: none;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  padding: 12px;
+}
+
+.edit-confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  align-items: end;
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  padding: 10px;
+}
+
+.edit-confirm-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
+  padding: 12px;
+}
+
+.edit-confirm-panel h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.edit-confirm-panel p {
+  margin: 8px 0;
+  color: var(--muted);
+}
+
+.edit-confirm-note {
+  font-size: 12px;
+}
+
+.edit-confirm-error {
+  border: 1px solid color-mix(in srgb, var(--danger) 42%, var(--border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger) !important;
+  padding: 7px 8px;
+}
+
+.edit-confirm-meta {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.edit-confirm-list {
+  max-height: 156px;
+  overflow: auto;
+  margin: 8px 0 10px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  list-style: none;
+}
+
+.edit-confirm-list li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.edit-confirm-list li:last-child {
+  border-bottom: 0;
+}
+
+.edit-confirm-list span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edit-confirm-list em {
+  color: var(--muted);
+  font-style: normal;
+}
+
+.edit-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.settings.open {
+  display: grid;
+  align-items: start;
+}
+
+.settings-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  padding: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+}
+
+.settings-panel h2 {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+
+label {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 9px;
+  color: var(--muted);
+}
+
+input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 7px 8px;
+}
+
+select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 7px 8px;
+}
+
+.font-fallback {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--danger) 8%, var(--bg));
+}
+
+.font-fallback strong {
+  color: var(--text);
+}
+
+.font-fallback label {
+  margin: 0;
+}
+
+.quick-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.quick-buttons button {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg) 92%, var(--brand));
+  color: var(--text);
+  padding: 4px 7px;
+  font-size: 11px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.quick-buttons button:hover {
+  border-color: var(--brand);
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.secondary {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.secondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.danger-text {
+  color: var(--danger);
+}
+
+.status {
+  margin-top: 6px;
+  color: var(--muted);
+  min-height: 18px;
+}
+
+.error {
+  color: var(--danger);
+}
+
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <header class="header">
+        <div class="title">
+          <h1>Figma Batch AI</h1>
+          <p>用自然语言批量修改已有设计稿</p>
+        </div>
+        <div class="header-actions">
+          <button id="clearButton" class="icon-button" type="button" title="清空对话" aria-label="清空对话">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 6h18" />
+              <path d="M8 6V4h8v2" />
+              <path d="M6 6l1 15h10l1-15" />
+              <path d="M10 11v6" />
+              <path d="M14 11v6" />
+            </svg>
+          </button>
+          <button id="settingsButton" class="icon-button" title="设置" aria-label="设置">⚙</button>
+        </div>
+      </header>
+
+      <section id="messages" class="messages" aria-live="polite"></section>
+
+      <section class="composer">
+        <div id="quickActions" class="quick-actions">
+          <button id="quickActionsToggle" class="quick-actions-toggle" type="button" aria-label="展开快捷指令" aria-expanded="false" aria-controls="quickActionsList">
+            <svg class="quick-actions-arrow" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M4 6l4 4 4-4" />
+            </svg>
+          </button>
+          <div id="quickActionsList" class="quick-actions-list" hidden>
+            <button class="chip" data-prompt="分析当前设计稿，总结可以批量修改的内容">分析画布</button>
+            <button class="chip" data-prompt="检查当前设计稿中的设计一致性问题">设计检查</button>
+            <button class="chip" data-prompt="把相似图层重命名为清晰统一的产品 UI 命名">重命名</button>
+          </div>
+        </div>
+        <div class="input-row">
+          <textarea id="prompt" placeholder="告诉 AI 你想如何修改设计稿..."></textarea>
+          <div class="composer-actions">
+            <button id="runToggleButton" class="primary run-toggle" type="button">运行</button>
+          </div>
+        </div>
+        <div id="status" class="status"></div>
+      </section>
+    </main>
+
+    <aside id="settings" class="settings" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <form id="settingsForm" class="settings-panel">
+        <h2 id="settingsTitle">模型设置</h2>
+        <label>
+          API Key
+          <input id="apiKey" type="password" autocomplete="off" placeholder="sk-..." />
+        </label>
+        <label>
+          Endpoint 地址
+          <input id="endpoint" type="url" placeholder="https://api.openai.com/v1" />
+          <span class="quick-buttons" aria-label="Endpoint 快捷选项">
+            <button type="button" data-target="endpoint" data-value="https://api.openai.com/v1">OpenAI</button>
+            <button type="button" data-target="endpoint" data-value="https://api.deepseek.com/v1">DeepSeek</button>
+            <button type="button" data-target="endpoint" data-value="https://dashscope.aliyuncs.com/compatible-mode/v1">DashScope</button>
+            <button type="button" data-target="endpoint" data-value="https://open.bigmodel.cn/api/paas/v4">Zhipu</button>
+            <button type="button" data-target="endpoint" data-value="https://openrouter.ai/api/v1">OpenRouter</button>
+          </span>
+        </label>
+        <label>
+          模型
+          <input id="model" type="text" placeholder="gpt-4o-mini" />
+          <span class="quick-buttons" aria-label="模型快捷选项">
+            <button type="button" data-target="model" data-value="gpt-4o-mini">GPT-4o mini</button>
+            <button type="button" data-target="model" data-value="deepseek-chat">DeepSeek Chat</button>
+            <button type="button" data-target="model" data-value="qwen-plus">Qwen Plus</button>
+            <button type="button" data-target="model" data-value="glm-4-flash">GLM-4 Flash</button>
+            <button type="button" data-target="model" data-value="openrouter/auto">OpenRouter Auto</button>
+          </span>
+        </label>
+        <div class="settings-actions">
+          <button type="button" id="closeSettings" class="secondary">取消</button>
+          <button type="submit" class="primary">保存</button>
+        </div>
+        <div id="settingsStatus" class="status"></div>
+      </form>
+    </aside>
+
+    <script>
+      // Generated by scripts/build.mjs. Do not edit directly.
+
+// src/ui/tools.js
+const SYSTEM_PROMPT = [
+  'You are Figma Batch AI, a careful assistant for editing existing Figma designs with natural language.',
+  'The primary workflow is page-level editing: if the user names a target such as a specific button, tag, tab, card, list item, menu item, form control, section, or text phrase, pass that exact phrase as target and use page scope unless the user specifically refers to the current selection.',
+  'Target phrases must come from the user request. Do not substitute a nearby word you saw during inspection. If the requested target is not visible in inspection results, ask for clarification instead of guessing a different label.',
+  'If inspection does not reveal the requested target phrase, ask the user to clarify instead of guessing and editing a broader target.',
+  'The secondary workflow is selection-level editing: when the user says selected/current selection, use selection scope. Even then, tools search descendants, so a selected group/frame can be edited through its inner text or background layers.',
+  'Prefer inspect_canvas when you need context. It automatically inspects the current selection when one exists, otherwise the current page. Do not call inspect_canvas more than twice for one user request.',
+  'For fill/background changes on controls or groups, use batch_set_fill with the original user target and keep includeText false unless the user explicitly asks to change text color. The tool will pick the most likely background layer inside each matched container.',
+  'For text, title, subtitle, or copy color changes inside containers, use batch_set_fill with includeText true. When the request is like "dialog title color", pass target="title" and containerTarget="dialog".',
+  'When the user asks to remove, clear, delete, or unset background/fill color, use batch_remove_fill instead of setting a transparent color.',
+  'When the user asks to copy, duplicate, or clone a layer/frame/artboard/module, use duplicate_layers. Preserve requested count, placement, and layout such as "2 copies", "bottom-left", or "vertical".',
+  'For broad edits, make the smallest useful change and summarize exactly what changed.',
+  'Never invent node IDs.',
+].join('\n');
+
+const TOOLS = [
+  tool('inspect_canvas', 'Inspect Figma layers. With auto scope, selected layers are inspected if present; otherwise the current page is inspected.', scopeProps({
+    limit: { type: 'number', description: 'Optional maximum number of nodes to inspect.' },
+  })),
+  tool('batch_set_text', 'Replace matching text layers with the same text, or replace only the matched substring when replaceOnly is true. For "change A to B" requests, use target=A, text=B, replaceOnly=true.', targetProps({
+    text: { type: 'string', description: 'New text content.' },
+    replaceOnly: { type: 'boolean', description: 'Set true to replace only occurrences of target inside each matched text layer.' },
+  }), ['text']),
+  tool('batch_set_fill', 'Set solid fill color on the most likely background layer inside each matching target container. Skips text by default.', targetProps({
+    color: { type: 'string', description: 'Hex color like #2563EB.' },
+    includeText: { type: 'boolean', description: 'Set true only when the user explicitly asks to change text color.' },
+    containerTarget: { type: 'string', description: 'Optional container phrase for nested text targets, such as dialog/modal/card when target is title/text/copy inside it.' },
+  }), ['color']),
+  tool('batch_remove_fill', 'Remove fills from the most likely background layer inside each matching target container. Use this for remove/clear/delete/unset background or fill color requests.', targetProps({})),
+  tool('batch_set_corner_radius', 'Set corner radius on matching layers that support it.', targetProps({
+    radius: { type: 'number', description: 'Corner radius in pixels, 0 to 200.' },
+  }), ['radius']),
+  tool('batch_set_opacity', 'Set opacity on matching layers.', targetProps({
+    opacity: { type: 'number', description: 'Opacity from 0 to 1.' },
+  }), ['opacity']),
+  tool('batch_set_visible', 'Show or hide matching layers.', targetProps({
+    visible: { type: 'boolean', description: 'False hides matching layers, true shows them.' },
+  }), ['visible']),
+  tool('batch_resize', 'Resize matching resizable layers.', targetProps({
+    width: { type: 'number', description: 'Optional width in pixels.' },
+    height: { type: 'number', description: 'Optional height in pixels.' },
+  })),
+  tool('batch_rename_layers', 'Rename matching layers with prefix, suffix, replace, or list mode.', targetProps({
+    mode: { type: 'string', enum: ['prefix', 'suffix', 'replace', 'list'] },
+    text: { type: 'string', description: 'Name text for prefix, suffix, or replace mode.' },
+    names: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'One name per selected layer when mode is list.',
+    },
+  }), ['mode']),
+  tool('duplicate_layers', 'Duplicate matching layers, frames, artboards, modules, or the current selection. Honors requested count, placement, and layout when provided, while avoiding overlap. With auto layout, left/right placement arranges copies horizontally, and top/bottom placement arranges copies vertically.', targetProps({
+    count: { type: 'number', description: 'Number of copies to create for each target. Default is 1.' },
+    placement: {
+      type: 'string',
+      enum: ['auto', 'right', 'left', 'top', 'bottom', 'top-left', 'top-right', 'bottom-left', 'bottom-right'],
+      description: 'Preferred placement relative to the original target.',
+    },
+    layout: {
+      type: 'string',
+      enum: ['auto', 'horizontal', 'vertical'],
+      description: 'How multiple copies should be arranged from the preferred placement.',
+    },
+  })),
+  tool('design_qa_check', 'Scan selected layers, or the current page when nothing is selected, for lightweight design QA issues.', scopeProps({})),
+];
+
+const CONFIRM_TOOLS = new Set([
+  'batch_set_text',
+  'batch_set_fill',
+  'batch_remove_fill',
+  'batch_set_corner_radius',
+  'batch_set_opacity',
+  'batch_set_visible',
+  'batch_resize',
+  'batch_rename_layers',
+]);
+
+function tool(name, description, properties, required = []) {
+  return {
+    type: 'function',
+    function: {
+      name,
+      description,
+      parameters: {
+        type: 'object',
+        properties,
+        required,
+        additionalProperties: false,
+      },
+    },
+  };
+}
+
+function targetProps(properties) {
+  return {
+    ...scopeProps(properties),
+    target: {
+      type: 'string',
+      description: 'Natural-language target phrase copied from the user request, such as a named button, tag, tab, card, list item, menu item, form control, section, or text phrase. Do not replace it with a different label found during inspection.',
+    },
+  };
+}
+
+function scopeProps(properties) {
+  return {
+    ...properties,
+    scope: {
+      type: 'string',
+      enum: ['auto', 'page', 'selection'],
+      description: 'Use page for named targets across the design, selection only when the user explicitly refers to selected/current layers, and auto when unsure.',
+    },
+  };
+}
+
+
+// src/ui/figma-bridge.js
+function createFigmaBridge() {
+  const pending = new Map();
+
+  window.onmessage = (event) => {
+    const message = event.data.pluginMessage;
+    if (!message || message.type !== 'command-result') return;
+    const request = pending.get(message.id);
+    if (!request) return;
+    pending.delete(message.id);
+    if (message.ok) request.resolve(message.result);
+    else request.reject(new Error(message.error || '命令执行失败'));
+  };
+
+  return {
+    call(command, args = {}) {
+      const id = makeId();
+      parent.postMessage({ pluginMessage: { type: 'command', id, command, args } }, '*');
+      return new Promise((resolve, reject) => {
+        pending.set(id, { resolve, reject });
+        window.setTimeout(() => {
+          if (!pending.has(id)) return;
+          pending.delete(id);
+          reject(new Error(`命令执行超时：${command}`));
+        }, 20000);
+      });
+    },
+  };
+}
+
+function makeId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+
+// src/ui/model-client.js
+
+async function chatCompletion(settings, messages, options = {}) {
+  const endpoint = settings.endpoint.replace(/\/+$/, '');
+  const response = await fetch(`${endpoint}/chat/completions`, {
+    method: 'POST',
+    signal: options.signal,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${settings.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: settings.model,
+      messages,
+      tools: TOOLS,
+      tool_choice: 'auto',
+      temperature: 0.2,
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`模型请求失败（${response.status}）：${text.slice(0, 240)}`);
+  }
+
+  return response.json();
+}
+
+
+// src/ui/edit-plan.js
+const CONTROL_INTENT_RE = /\b(button|btn|cta|tab|tabs|chip|chips|tag|tags|badge|badges|card|cards|list item|list items|menu item|menu items|nav item|nav items|input|field|search|switch|toggle|checkbox|radio|option|selector|dropdown|toast|banner)\b|按钮|按键|控件|选项卡|标签页|标签|徽标|角标|卡片|列表项|菜单项|导航项|入口|输入框|搜索框|开关|复选框|单选框|选项|下拉|选择器|提示条|横幅/i;
+const TARGET_QUALIFIER_RE = /全部|所有|当前|选中|图层|按钮|按键|控件|选项卡|标签页|标签|徽标|角标|卡片|列表项|菜单项|导航项|入口|输入框|搜索框|开关|复选框|单选框|选项|下拉|选择器|提示条|横幅/g;
+
+function createEditPlan(prompt) {
+  const intent = analyzeIntent(prompt);
+  return planFromIntent(intent);
+}
+
+function enrichArgsFromPrompt(toolName, args, prompt) {
+  const plan = createEditPlan(prompt);
+  if (plan && plan.toolName === toolName) {
+    Object.assign(args, { ...plan.args, ...args });
+  }
+
+  const intent = analyzeIntent(prompt);
+  if (['batch_set_fill', 'batch_remove_fill'].includes(toolName) && intent.targetKind === 'control') {
+    args.targetKind = 'control';
+  }
+}
+
+function normalizeTarget(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/#[0-9a-f]{3,8}\b/gi, ' ')
+    .replace(/[“”"'`#]/g, '')
+    .replace(/\b(all|every|the|selected|current|layer|layers|button|buttons|btn|cta|tab|tabs|chip|chips|tag|tags|badge|badges|card|cards|input|field|search|switch|toggle|checkbox|radio|option|selector|dropdown|toast|banner)\b/g, ' ')
+    .replace(TARGET_QUALIFIER_RE, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function analyzeIntent(prompt) {
+  const text = String(prompt || '').trim();
+  const intent = {
+    raw: text,
+    kind: 'unknown',
+    target: '',
+    scope: scopeFromText(text),
+    targetKind: hasControlIntent(text) ? 'control' : 'layer',
+    count: countFromText(text),
+    placement: placementFromText(text),
+    layout: layoutFromText(text),
+    value: null,
+    from: '',
+    to: '',
+  };
+
+  return analyzeDuplicate(intent)
+    || analyzeRemoveFill(intent)
+    || analyzeSetFill(intent)
+    || analyzeCornerRadius(intent)
+    || analyzeVisibility(intent)
+    || analyzeTextReplacement(intent)
+    || intent;
+}
+
+function planFromIntent(intent) {
+  if (!intent || intent.kind === 'unknown') return null;
+
+  const target = intent.target || intent.from;
+  if (!target) return null;
+
+  const common = {
+    target,
+    scope: intent.scope,
+  };
+
+  if (intent.kind === 'duplicate') {
+    return plan(intent, 'duplicate_layers', {
+      ...common,
+      count: intent.count,
+      placement: intent.placement,
+      layout: intent.layout,
+    });
+  }
+
+  if (intent.kind === 'set_fill') {
+    return plan(intent, 'batch_set_fill', {
+      ...common,
+      color: intent.value,
+      targetKind: intent.targetKind,
+      includeText: intent.includeText,
+      containerTarget: intent.containerTarget,
+    });
+  }
+
+  if (intent.kind === 'remove_fill') {
+    return plan(intent, 'batch_remove_fill', {
+      ...common,
+      targetKind: intent.targetKind,
+    });
+  }
+
+  if (intent.kind === 'replace_text') {
+    return plan(intent, 'batch_set_text', {
+      target: intent.from,
+      text: intent.to,
+      replaceOnly: true,
+      scope: intent.scope,
+    });
+  }
+
+  if (intent.kind === 'set_corner_radius') {
+    return plan(intent, 'batch_set_corner_radius', {
+      ...common,
+      radius: intent.value,
+    });
+  }
+
+  if (intent.kind === 'set_visible') {
+    return plan(intent, 'batch_set_visible', {
+      ...common,
+      visible: intent.value,
+    });
+  }
+
+  return null;
+}
+
+function plan(intent, toolName, args) {
+  return {
+    action: intent.kind,
+    intent,
+    toolName,
+    args,
+  };
+}
+
+function analyzeDuplicate(base) {
+  const text = base.raw;
+  const patterns = [
+    /^(?:复制|拷贝|克隆)\s*(?:(?:\d+|一|二|两|三|四|五|六|七|八|九|十)\s*(?:个|份|张)?|一份|一个|一下)?\s*(.+?)\s*$/i,
+    /^(?:将|把)\s*(.+?)\s*(?:复制|拷贝|克隆)\s*(?:(?:\d+|一|二|两|三|四|五|六|七|八|九|十)\s*(?:个|份|张)?|一份|一个|一下)?(?:.*)?$/i,
+    /^(?:duplicate|copy|clone)\s+(.+?)\s*$/i,
+  ];
+  const match = firstMatch(text, patterns);
+  if (!match) return null;
+
+  const target = cleanDuplicateTarget(match[1]);
+  if (!target) return null;
+
+  return {
+    ...base,
+    kind: 'duplicate',
+    target,
+    scope: scopeFromText(`${text} ${target}`),
+  };
+}
+
+function analyzeSetFill(base) {
+  const patterns = [
+    /^(?:将|把)\s*(.+?)\s*(?:的)?(?:色值|颜色|文字颜色|文本颜色|字体颜色|文字色|文本色)\s*(?:改成|改为|替换成|替换为|换成|变成)\s*(#[0-9a-f]{3,8})\s*$/i,
+    /^(?:将|把)\s*(.+?)\s*(?:的)?(?:背景色|底色|填充色|填充)\s*(?:改成|改为|替换成|替换为|换成|变成)\s*(#[0-9a-f]{3,8})\s*$/i,
+    /^(?:set|change)\s+(.+?)\s+(?:background|fill)\s+(?:to\s+)?(#[0-9a-f]{3,8})\s*$/i,
+  ];
+  const match = firstMatch(base.raw, patterns);
+  if (!match) return null;
+
+  const textRelation = splitContainerTextTarget(match[1]);
+  const target = cleanPart(textRelation?.child || match[1]);
+  const color = cleanPart(match[2]);
+  if (!target || !isColorValue(color)) return null;
+
+  return {
+    ...base,
+    kind: 'set_fill',
+    target,
+    containerTarget: textRelation?.container || '',
+    includeText: Boolean(textRelation) || hasTextColorIntent(base.raw, target),
+    value: color,
+    scope: scopeFromText(`${base.raw} ${target}`),
+    targetKind: hasControlIntent(target) ? 'control' : base.targetKind,
+  };
+}
+
+function analyzeRemoveFill(base) {
+  const patterns = [
+    /^(?:将|把)\s*(.+?)\s*(?:的)?(?:背景色|底色|填充色|填充)\s*(?:去掉|去除|移除|删除|清除|清空|取消|设为无|改为无|改成无)\s*$/i,
+    /^(?:去掉|去除|移除|删除|清除|清空|取消)\s*(.+?)\s*(?:的)?(?:背景色|底色|填充色|填充)\s*$/i,
+    /^(?:remove|clear|delete|unset)\s+(.+?)\s+(?:background|fill)(?:\s+color)?\s*$/i,
+  ];
+  const match = firstMatch(base.raw, patterns);
+  if (!match) return null;
+
+  const target = cleanPart(match[1]);
+  if (!target) return null;
+
+  return {
+    ...base,
+    kind: 'remove_fill',
+    target,
+    scope: scopeFromText(`${base.raw} ${target}`),
+    targetKind: hasControlIntent(target) ? 'control' : base.targetKind,
+  };
+}
+
+function analyzeTextReplacement(base) {
+  const patterns = [
+    /^(?:将|把)\s*(.+?)\s*(?:改成|改为|替换成|替换为|换成|变成)\s*(.+?)\s*$/,
+    /^change\s+(.+?)\s+to\s+(.+?)\s*$/i,
+    /^replace\s+(.+?)\s+with\s+(.+?)\s*$/i,
+  ];
+  const match = firstMatch(base.raw, patterns);
+  if (!match) return null;
+
+  const from = cleanPart(match[1]);
+  const to = cleanPart(match[2]);
+  if (!from || !to || isColorValue(to) || hasBackgroundIntent(from)) return null;
+
+  return {
+    ...base,
+    kind: 'replace_text',
+    from,
+    to,
+  };
+}
+
+function analyzeCornerRadius(base) {
+  const match = base.raw.match(/^(?:将|把)\s*(.+?)\s*(?:的)?(?:圆角|radius|corner radius)\s*(?:改成|改为|设为|设置为|变成)\s*(\d+(?:\.\d+)?)\s*(?:px|像素)?\s*$/i);
+  if (!match) return null;
+
+  const target = cleanPart(match[1]);
+  const radius = Number(match[2]);
+  if (!target || !Number.isFinite(radius)) return null;
+
+  return {
+    ...base,
+    kind: 'set_corner_radius',
+    target,
+    value: radius,
+    scope: scopeFromText(`${base.raw} ${target}`),
+  };
+}
+
+function analyzeVisibility(base) {
+  const patterns = [
+    /^(?:隐藏|hide)\s*(.+?)\s*$/i,
+    /^(?:将|把)\s*(.+?)\s*(?:隐藏|设为隐藏)\s*$/i,
+  ];
+  const match = firstMatch(base.raw, patterns);
+  if (!match) return null;
+
+  const target = cleanPart(match[1]);
+  if (!target) return null;
+
+  return {
+    ...base,
+    kind: 'set_visible',
+    target,
+    value: false,
+    scope: scopeFromText(`${base.raw} ${target}`),
+  };
+}
+
+function firstMatch(text, patterns) {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) return match;
+  }
+  return null;
+}
+
+function cleanPart(value) {
+  return String(value || '')
+    .trim()
+    .replace(/[“”‘’]/g, '')
+    .replace(/^["']+|["']+$/g, '')
+    .trim();
+}
+
+function cleanDuplicateTarget(value) {
+  return cleanPart(value)
+    .replace(/^\s*(\d+|一|二|两|三|四|五|六|七|八|九|十)\s*(?:个|份|张)?\s*/i, '')
+    .replace(/\s*(?:放在|放到|放置在|置于|在|到|至|于)\s*(?:左下角|右下角|左上角|右上角|左边|左侧|左方|右边|右侧|右方|上方|上面|顶部|下方|下面|底部).*/i, '')
+    .replace(/\s*(?:排列|横向|纵向|竖向|水平|垂直).*/i, '')
+    .trim();
+}
+
+function splitContainerTextTarget(value) {
+  const text = cleanPart(value);
+  const match = text.match(/^(.+?)(?:的|\s+)?(标题|副标题|主标题|文案|文字|文本|title|subtitle)$/i);
+  if (!match) return null;
+
+  const container = cleanPart(match[1]);
+  const child = cleanPart(match[2]);
+  if (!container || !child) return null;
+  return { container, child };
+}
+
+function hasTextColorIntent(raw, target) {
+  return /文字颜色|文本颜色|字体颜色|文字色|文本色|色值|颜色/i.test(String(raw || ''))
+    && /标题|副标题|主标题|文案|文字|文本|title|subtitle/i.test(String(target || raw || ''));
+}
+
+function countFromText(value) {
+  const text = String(value || '');
+  const match = text.match(/(?:复制|拷贝|克隆)\s*(\d+|一|二|两|三|四|五|六|七|八|九|十)\s*(?:个|份|张)?|(\d+|一|二|两|三|四|五|六|七|八|九|十)\s*(?:个|份|张)\s*(?:副本|复制|拷贝|克隆)?/i);
+  const raw = match?.[1] || match?.[2];
+  return chineseNumber(raw) || 1;
+}
+
+function placementFromText(value) {
+  const text = String(value || '');
+  if (/左下|下左|bottom\s*left/i.test(text)) return 'bottom-left';
+  if (/右下|下右|bottom\s*right/i.test(text)) return 'bottom-right';
+  if (/左上|上左|top\s*left/i.test(text)) return 'top-left';
+  if (/右上|上右|top\s*right/i.test(text)) return 'top-right';
+  if (/左边|左侧|左方|\bleft\b/i.test(text)) return 'left';
+  if (/右边|右侧|右方|\bright\b/i.test(text)) return 'right';
+  if (/下方|下面|底部|\bbottom\b|below/i.test(text)) return 'bottom';
+  if (/上方|上面|顶部|\btop\b|above/i.test(text)) return 'top';
+  return 'auto';
+}
+
+function layoutFromText(value) {
+  const text = String(value || '');
+  if (/纵向|竖向|垂直|vertical/i.test(text)) return 'vertical';
+  if (/横向|水平|horizontal/i.test(text)) return 'horizontal';
+  return 'auto';
+}
+
+function scopeFromText(value) {
+  return /选中|所选|当前选区|selected|selection/i.test(String(value || '')) ? 'selection' : 'page';
+}
+
+function chineseNumber(value) {
+  const text = String(value || '').trim();
+  if (/^\d+$/.test(text)) return Number(text);
+  return {
+    一: 1,
+    二: 2,
+    两: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+    十: 10,
+  }[text] || null;
+}
+
+function hasControlIntent(value) {
+  return CONTROL_INTENT_RE.test(String(value || ''));
+}
+
+function hasBackgroundIntent(value) {
+  return /\b(background|fill)\b|背景|底色|填充/i.test(String(value || ''));
+}
+
+function isColorValue(value) {
+  return /^#[0-9a-f]{3,8}$/i.test(String(value || '').trim());
+}
+
+
+// src/ui/tool-loop.js
+
+async function runToolLoop({ settings, messages, bridge, appendMessage, signal }) {
+  let current = [...messages];
+  let finalText = '';
+  let inspectCount = 0;
+  const userPrompt = latestUserPrompt(messages);
+  const userContext = recentUserContext(messages);
+  const plan = createEditPlan(userPrompt);
+
+  throwIfAborted(signal);
+
+  if (plan) {
+    const runner = CONFIRM_TOOLS.has(plan.toolName) ? runConfirmedTool : runSimpleTool;
+    const result = await runner(plan.toolName, { ...plan.args }, bridge, appendMessage, signal);
+    return result.skipped ? result.reason : result.message || '编辑已完成。';
+  }
+
+  for (let turn = 0; turn < 8; turn++) {
+    throwIfAborted(signal);
+    const response = await chatCompletion(settings, current, { signal });
+    const message = response.choices?.[0]?.message;
+    if (!message) throw new Error('模型没有返回有效内容。');
+
+    if (!message.tool_calls?.length) {
+      finalText = message.content || '';
+      break;
+    }
+
+    current.push(message);
+
+    for (const toolCall of message.tool_calls) {
+      const name = toolCall.function?.name;
+      const args = safeJson(toolCall.function?.arguments || '{}');
+      if (!TOOLS.some((item) => item.function.name === name)) {
+        throw new Error(`模型调用了不支持的工具：${name}`);
+      }
+
+      enrichArgsFromPrompt(name, args, userPrompt);
+
+      const targetError = validateTargetFromPrompt(name, args, userContext);
+      if (targetError) {
+        current.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: JSON.stringify({ skipped: true, reason: targetError }),
+        });
+        appendMessage('tool', `已跳过 ${name}：${targetError}`);
+        continue;
+      }
+
+      if (name === 'inspect_canvas') {
+        inspectCount++;
+        if (inspectCount > 2) {
+          current.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({ skipped: true, reason: '本次请求已达到画布分析次数上限。' }),
+          });
+          continue;
+        }
+      }
+
+      throwIfAborted(signal);
+      const result = CONFIRM_TOOLS.has(name)
+        ? await runConfirmedTool(name, args, bridge, appendMessage, signal)
+        : await runSimpleTool(name, args, bridge, appendMessage, signal);
+      current.push({
+        role: 'tool',
+        tool_call_id: toolCall.id,
+        content: JSON.stringify(result),
+      });
+    }
+  }
+
+  if (!finalText) finalText = '已完成请求的工具操作。';
+  return finalText;
+}
+
+async function runConfirmedTool(name, args, bridge, appendMessage, signal) {
+  throwIfAborted(signal);
+  appendMessage('tool', `正在预览 ${name} ${JSON.stringify(args)}`);
+  const preview = await previewConfirmedTool(name, args, bridge, signal);
+  throwIfAborted(signal);
+  appendMessage('tool', preview.message || `正在预览 ${name}。`);
+
+  const approvedPreview = await confirmTool(name, args, preview, bridge, appendMessage, signal);
+  if (!approvedPreview) {
+    return { skipped: true, reason: '用户在预览后取消了本次操作。' };
+  }
+
+  throwIfAborted(signal);
+  args.nodeIds = approvedPreview.nodeIds || [];
+  return runSimpleTool(name, args, bridge, appendMessage, signal);
+}
+
+async function previewConfirmedTool(name, args, bridge, signal) {
+  const preview = await bridge.call('preview_batch_edit', { toolName: name, toolArgs: args });
+  throwIfAborted(signal);
+  if (preview.fontIssues?.length) {
+    preview.availableFonts = await bridge.call('list_available_fonts');
+  }
+  return preview;
+}
+
+async function runSimpleTool(name, args, bridge, appendMessage, signal) {
+  throwIfAborted(signal);
+  appendMessage('tool', `正在执行 ${name} ${JSON.stringify(args)}`);
+  const result = await bridge.call(name, args);
+  throwIfAborted(signal);
+  appendMessage('tool', result.message || `${name} 已完成。`);
+  return result;
+}
+
+function confirmTool(name, args, preview, bridge, appendMessage, signal) {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve(null);
+      return;
+    }
+
+    let currentPreview = preview;
+    let deepSearchUsed = Boolean(args.deepSearch);
+    const panel = document.createElement('div');
+    panel.className = 'edit-confirm';
+    panel.innerHTML = confirmationMarkup(name, args, currentPreview, { deepSearchUsed });
+
+    const controls = () => ({
+      confirmButton: panel.querySelector('[data-confirm]'),
+      cancelButton: panel.querySelector('[data-cancel]'),
+      deepSearchButton: panel.querySelector('[data-deep-search]'),
+    });
+    const finish = (approved) => {
+      signal?.removeEventListener('abort', abort);
+      if (approved) applyFallbackFontChoice(panel, args);
+      panel.remove();
+      resolve(approved ? currentPreview : null);
+    };
+    const abort = () => finish(false);
+
+    const bindActions = () => {
+      const { confirmButton, cancelButton, deepSearchButton } = controls();
+      confirmButton.addEventListener('click', () => finish(true));
+      cancelButton.addEventListener('click', () => finish(false));
+      deepSearchButton?.addEventListener('click', async () => {
+        deepSearchButton.disabled = true;
+        deepSearchButton.textContent = '检索中...';
+        try {
+          const nextArgs = deepSearchArgs(args);
+          const nextPreview = await previewConfirmedTool(name, nextArgs, bridge, signal);
+          currentPreview = nextPreview;
+          Object.assign(args, nextArgs);
+          deepSearchUsed = true;
+          appendMessage('tool', nextPreview.message || `深度检索预览到 ${nextPreview.targetCount || 0} 个图层。`);
+          panel.innerHTML = confirmationMarkup(name, args, currentPreview, { deepSearchUsed });
+          bindActions();
+          controls().confirmButton.focus();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          appendMessage('tool', `深度检索失败：${message}`);
+          panel.innerHTML = confirmationMarkup(name, args, currentPreview, {
+            deepSearchUsed,
+            error: message,
+          });
+          bindActions();
+          controls().deepSearchButton?.focus();
+        }
+      });
+    };
+
+    bindActions();
+    panel.addEventListener('click', (event) => {
+      if (event.target === panel) finish(false);
+    });
+    signal?.addEventListener('abort', abort, { once: true });
+
+    document.body.appendChild(panel);
+    controls().confirmButton.focus();
+  });
+}
+
+function confirmationMarkup(name, args, preview, state = {}) {
+  const scope = escapeHtml(preview.scope || args.scope || 'auto');
+  const target = escapeHtml(preview.targetQuery || args.target || '所有匹配图层');
+  const count = Number(preview.targetCount || preview.nodes?.length || 0);
+  const nodes = Array.isArray(preview.nodes) ? preview.nodes : [];
+  const fontPicker = fontPickerMarkup(preview);
+  const deepSearchNote = state.deepSearchUsed
+    ? '<p class="edit-confirm-note">已启用深度检索，并已重新选中最新匹配图层。</p>'
+    : '<p class="edit-confirm-note">深度检索会保留当前范围并提高扫描上限，请在预览偏少时使用。</p>';
+  const error = state.error
+    ? `<p class="edit-confirm-error">${escapeHtml(state.error)}</p>`
+    : '';
+  const list = nodes.length
+    ? nodes.map((node) => `<li><span>${escapeHtml(node.name || '(未命名)')}</span><em>${escapeHtml(node.type || '')}</em></li>`).join('')
+    : '<li><span>暂无图层详情</span><em></em></li>';
+
+  return [
+    '<section class="edit-confirm-panel" role="dialog" aria-modal="true" aria-labelledby="editConfirmTitle">',
+    `<h2 id="editConfirmTitle">确认执行 ${escapeHtml(name)}</h2>`,
+    '<div class="edit-confirm-meta">',
+    `<span>范围：${scope}</span>`,
+    `<span>目标：${target}</span>`,
+    `<span>图层数：${count}</span>`,
+    '</div>',
+    '<p>这些图层已在 Figma 中自动选中。请检查画布后确认是否应用修改。</p>',
+    deepSearchNote,
+    error,
+    fontPicker,
+    `<ul class="edit-confirm-list">${list}</ul>`,
+    '<div class="edit-confirm-actions">',
+    `<button type="button" class="secondary" data-deep-search ${state.deepSearchUsed ? 'disabled' : ''}>深度检索</button>`,
+    '<button type="button" class="secondary" data-cancel>取消</button>',
+    '<button type="button" class="primary" data-confirm>应用修改</button>',
+    '</div>',
+    '</section>',
+  ].join('');
+}
+
+function deepSearchArgs(args) {
+  const next = { ...args, deepSearch: true };
+  delete next.nodeIds;
+  return next;
+}
+
+function fontPickerMarkup(preview) {
+  const issues = Array.isArray(preview.fontIssues) ? preview.fontIssues : [];
+  if (!issues.length) return '';
+
+  const fonts = Array.isArray(preview.availableFonts) ? preview.availableFonts : [];
+  const options = fonts.length
+    ? fonts.map((font) => {
+      const family = escapeHtml(font.family);
+      const style = escapeHtml(font.style);
+      const value = escapeHtml(encodeFontValue(font));
+      return `<option value="${value}">${family} ${style}</option>`;
+    }).join('')
+    : '<option value="">没有找到可用字体</option>';
+
+  return [
+    '<div class="font-fallback">',
+    `<strong>${issues.length} 个文本图层使用了当前不可用的字体。</strong>`,
+    '<label>改用已有字体',
+    `<select data-font-fallback ${fonts.length ? '' : 'disabled'}>${options}</select>`,
+    '</label>',
+    '</div>',
+  ].join('');
+}
+
+function applyFallbackFontChoice(panel, args) {
+  const select = panel.querySelector('[data-font-fallback]');
+  if (!select || !select.value) return;
+
+  const font = decodeFontValue(select.value);
+  if (font?.family && font?.style) args.fallbackFont = font;
+}
+
+function safeJson(raw) {
+  try {
+    return JSON.parse(raw || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function latestUserPrompt(messages) {
+  return [...messages].reverse().find((message) => message.role === 'user')?.content || '';
+}
+
+function recentUserContext(messages) {
+  return messages
+    .filter((message) => message.role === 'user')
+    .slice(-3)
+    .map((message) => message.content)
+    .join('\n');
+}
+
+function validateTargetFromPrompt(name, args, userContext) {
+  if (!CONFIRM_TOOLS.has(name) || !args.target) return '';
+
+  const prompt = normalizeTarget(userContext);
+  const target = normalizeTarget(args.target);
+  if (!target || prompt.includes(target) || targetTokensAllowed(prompt, target)) return '';
+
+  return `目标“${args.target}”没有出现在用户请求中，请先澄清，不要猜测其他目标。`;
+}
+
+function targetTokensAllowed(prompt, target) {
+  const parts = target.split(/\s+/).filter(Boolean);
+  if (!parts.length) return true;
+  return parts.every((part) => prompt.includes(part));
+}
+
+function throwIfAborted(signal) {
+  if (!signal?.aborted) return;
+  const error = new Error('操作已停止。');
+  error.name = 'AbortError';
+  throw error;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function encodeFontValue(font) {
+  return btoa(unescape(encodeURIComponent(JSON.stringify({
+    family: font.family,
+    style: font.style,
+  }))));
+}
+
+function decodeFontValue(value) {
+  try {
+    return JSON.parse(decodeURIComponent(escape(atob(value))));
+  } catch {
+    return null;
+  }
+}
+
+
+// src/ui/settings-panel.js
+function createSettingsPanel({ bridge, state, setStatus }) {
+  const settingsEl = $('settings');
+  const settingsStatusEl = $('settingsStatus');
+
+  $('settingsButton').onclick = open;
+  $('closeSettings').onclick = close;
+  $('settingsForm').onsubmit = save;
+  $('settingsForm').addEventListener('click', applyShortcut);
+
+  function open() {
+    if (state.settings) {
+      $('apiKey').value = state.settings.apiKey || '';
+      $('endpoint').value = state.settings.endpoint || 'https://api.openai.com/v1';
+      $('model').value = state.settings.model || 'gpt-4o-mini';
+    }
+    settingsStatusEl.textContent = '';
+    settingsStatusEl.classList.remove('error');
+    settingsEl.classList.add('open');
+  }
+
+  function close() {
+    settingsEl.classList.remove('open');
+  }
+
+  async function save(event) {
+    event.preventDefault();
+    settingsStatusEl.textContent = '正在保存...';
+    settingsStatusEl.classList.remove('error');
+    try {
+      const next = {
+        apiKey: $('apiKey').value,
+        endpoint: $('endpoint').value,
+        model: $('model').value,
+      };
+      await bridge.call('save_settings', next);
+      state.settings = next;
+      settingsStatusEl.textContent = '已保存。';
+      close();
+      setStatus('设置已保存。');
+    } catch (error) {
+      settingsStatusEl.textContent = error.message;
+      settingsStatusEl.classList.add('error');
+    }
+  }
+
+  function applyShortcut(event) {
+    const button = event.target.closest('[data-target][data-value]');
+    if (!button) return;
+
+    const input = $(button.dataset.target);
+    if (!input) return;
+
+    input.value = button.dataset.value;
+    input.focus();
+  }
+
+  return { open, close };
+}
+
+function $(id) {
+  return document.getElementById(id);
+}
+
+
+// src/ui/app.js
+
+const state = {
+  settings: null,
+  busy: false,
+  messages: [],
+  abortController: null,
+  runId: 0,
+};
+
+const bridge = createFigmaBridge();
+const messagesEl = $('messages');
+const promptEl = $('prompt');
+const runToggleButton = $('runToggleButton');
+const clearButton = $('clearButton');
+const quickActionsToggle = $('quickActionsToggle');
+const quickActionsList = $('quickActionsList');
+const statusEl = $('status');
+const settingsPanel = createSettingsPanel({ bridge, state, setStatus });
+
+runToggleButton.onclick = () => {
+  if (state.busy) stopCurrentRun();
+  else runPrompt(promptEl.value);
+};
+clearButton.onclick = clearConversation;
+quickActionsToggle.onclick = toggleQuickActions;
+
+document.querySelectorAll('[data-prompt]').forEach((button) => {
+  button.addEventListener('click', () => {
+    promptEl.value = button.getAttribute('data-prompt');
+    setQuickActionsOpen(false);
+    promptEl.focus();
+  });
+});
+
+promptEl.addEventListener('keydown', (event) => {
+  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+    event.preventDefault();
+    runPrompt(promptEl.value);
+  }
+});
+
+init();
+
+async function init() {
+  try {
+    state.settings = await bridge.call('get_settings');
+    renderWelcome();
+    if (!state.settings.apiKey) settingsPanel.open();
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+}
+
+function renderWelcome() {
+  appendMessage('assistant', [
+    '你可以直接描述想修改的设计稿内容，不必先选中图层。选中图层只会作为缩小范围的辅助方式。',
+    '',
+    '示例：',
+    '- 将所有主按钮背景色改成 #4BC430',
+    '- 把所有兑换按钮文案改成“去使用”',
+    '- 将选中的卡片圆角改成 12px',
+    '- 检查当前设计稿中的设计一致性问题',
+  ].join('\n'));
+}
+
+async function runPrompt(rawPrompt) {
+  const userPrompt = rawPrompt.trim();
+  if (!userPrompt || state.busy) return;
+  if (!state.settings?.apiKey) {
+    settingsPanel.open();
+    setStatus('请先填写 API Key，再运行 AI 指令。', true);
+    return;
+  }
+
+  const conversation = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    ...state.messages
+      .filter((message) => ['user', 'assistant'].includes(message.role))
+      .slice(-10)
+      .map(({ role, content }) => ({ role, content })),
+    { role: 'user', content: userPrompt },
+  ];
+
+  const runId = state.runId + 1;
+  const abortController = new AbortController();
+  state.runId = runId;
+  state.abortController = abortController;
+
+  setBusy(true);
+  setStatus('正在思考...');
+  promptEl.value = '';
+  appendMessage('user', userPrompt);
+
+  try {
+    const finalText = await runToolLoop({
+      settings: state.settings,
+      messages: conversation,
+      bridge,
+      appendMessage,
+      signal: abortController.signal,
+    });
+    if (runId !== state.runId || abortController.signal.aborted) return;
+    appendMessage('assistant', finalText || '已完成。');
+    setStatus('就绪。');
+  } catch (error) {
+    if (runId !== state.runId) return;
+    if (isAbortError(error)) {
+      appendMessage('assistant', '已停止当前对话。');
+      setStatus('已停止。');
+    } else {
+      appendMessage('assistant', `出错：${error.message}`);
+      setStatus(error.message, true);
+    }
+  } finally {
+    if (runId === state.runId) {
+      state.abortController = null;
+      setBusy(false);
+    }
+  }
+}
+
+function appendMessage(role, content) {
+  state.messages.push({ role, content });
+  const el = document.createElement('div');
+  el.className = `message ${role}`;
+  el.textContent = content;
+  messagesEl.appendChild(el);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function setBusy(busy) {
+  state.busy = busy;
+  runToggleButton.textContent = busy ? '停止' : '运行';
+  runToggleButton.classList.toggle('danger', busy);
+  runToggleButton.setAttribute('aria-label', busy ? '停止当前对话' : '运行指令');
+  promptEl.disabled = busy;
+}
+
+function setStatus(text, isError = false) {
+  statusEl.textContent = text || '';
+  statusEl.classList.toggle('error', Boolean(isError));
+}
+
+function stopCurrentRun() {
+  if (!state.busy || !state.abortController) return;
+  state.abortController.abort();
+  setStatus('正在停止...');
+}
+
+function clearConversation() {
+  if (state.busy) stopCurrentRun();
+  state.runId++;
+  state.abortController = null;
+  setBusy(false);
+  state.messages = [];
+  messagesEl.innerHTML = '';
+  renderWelcome();
+  setStatus('对话已清空。');
+}
+
+function toggleQuickActions() {
+  setQuickActionsOpen(quickActionsList.hidden);
+}
+
+function setQuickActionsOpen(open) {
+  quickActionsList.hidden = !open;
+  quickActionsToggle.setAttribute('aria-expanded', String(open));
+  quickActionsToggle.setAttribute('aria-label', open ? '收起快捷指令' : '展开快捷指令');
+  quickActionsToggle.classList.toggle('open', open);
+  quickActionsToggle.closest('.composer')?.classList.toggle('quick-actions-open', open);
+}
+
+function isAbortError(error) {
+  return error?.name === 'AbortError' || /aborted|abort|停止/.test(String(error?.message || ''));
+}
+
+function $(id) {
+  return document.getElementById(id);
+}
+
+
+    </script>
+  </body>
+</html>

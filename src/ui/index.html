@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Figma Batch AI</title>
+    <style>
+      __STYLE__
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <header class="header">
+        <div class="title">
+          <h1>Figma Batch AI</h1>
+          <p>用自然语言批量修改已有设计稿</p>
+        </div>
+        <div class="header-actions">
+          <button id="clearButton" class="icon-button" type="button" title="清空对话" aria-label="清空对话">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 6h18" />
+              <path d="M8 6V4h8v2" />
+              <path d="M6 6l1 15h10l1-15" />
+              <path d="M10 11v6" />
+              <path d="M14 11v6" />
+            </svg>
+          </button>
+          <button id="settingsButton" class="icon-button" title="设置" aria-label="设置">⚙</button>
+        </div>
+      </header>
+
+      <section id="messages" class="messages" aria-live="polite"></section>
+
+      <section class="composer">
+        <div id="quickActions" class="quick-actions">
+          <button id="quickActionsToggle" class="quick-actions-toggle" type="button" aria-label="展开快捷指令" aria-expanded="false" aria-controls="quickActionsList">
+            <svg class="quick-actions-arrow" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M4 6l4 4 4-4" />
+            </svg>
+          </button>
+          <div id="quickActionsList" class="quick-actions-list" hidden>
+            <button class="chip" data-prompt="分析当前设计稿，总结可以批量修改的内容">分析画布</button>
+            <button class="chip" data-prompt="检查当前设计稿中的设计一致性问题">设计检查</button>
+            <button class="chip" data-prompt="把相似图层重命名为清晰统一的产品 UI 命名">重命名</button>
+          </div>
+        </div>
+        <div class="input-row">
+          <textarea id="prompt" placeholder="告诉 AI 你想如何修改设计稿..."></textarea>
+          <div class="composer-actions">
+            <button id="runToggleButton" class="primary run-toggle" type="button">运行</button>
+          </div>
+        </div>
+        <div id="status" class="status"></div>
+      </section>
+    </main>
+
+    <aside id="settings" class="settings" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <form id="settingsForm" class="settings-panel">
+        <h2 id="settingsTitle">模型设置</h2>
+        <label>
+          API Key
+          <input id="apiKey" type="password" autocomplete="off" placeholder="sk-..." />
+        </label>
+        <label>
+          Endpoint 地址
+          <input id="endpoint" type="url" placeholder="https://api.openai.com/v1" />
+          <span class="quick-buttons" aria-label="Endpoint 快捷选项">
+            <button type="button" data-target="endpoint" data-value="https://api.openai.com/v1">OpenAI</button>
+            <button type="button" data-target="endpoint" data-value="https://api.deepseek.com/v1">DeepSeek</button>
+            <button type="button" data-target="endpoint" data-value="https://dashscope.aliyuncs.com/compatible-mode/v1">DashScope</button>
+            <button type="button" data-target="endpoint" data-value="https://open.bigmodel.cn/api/paas/v4">Zhipu</button>
+            <button type="button" data-target="endpoint" data-value="https://openrouter.ai/api/v1">OpenRouter</button>
+          </span>
+        </label>
+        <label>
+          模型
+          <input id="model" type="text" placeholder="gpt-4o-mini" />
+          <span class="quick-buttons" aria-label="模型快捷选项">
+            <button type="button" data-target="model" data-value="gpt-4o-mini">GPT-4o mini</button>
+            <button type="button" data-target="model" data-value="deepseek-chat">DeepSeek Chat</button>
+            <button type="button" data-target="model" data-value="qwen-plus">Qwen Plus</button>
+            <button type="button" data-target="model" data-value="glm-4-flash">GLM-4 Flash</button>
+            <button type="button" data-target="model" data-value="openrouter/auto">OpenRouter Auto</button>
+          </span>
+        </label>
+        <div class="settings-actions">
+          <button type="button" id="closeSettings" class="secondary">取消</button>
+          <button type="submit" class="primary">保存</button>
+        </div>
+        <div id="settingsStatus" class="status"></div>
+      </form>
+    </aside>
+
+    <script>
+      __SCRIPT__
+    </script>
+  </body>
+</html>

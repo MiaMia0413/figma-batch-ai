@@ -1,0 +1,26 @@
+{
+  "name": "Figma Batch AI",
+  "id": "figma-batch-ai",
+  "api": "1.0.0",
+  "main": "dist/main.js",
+  "ui": "dist/ui.html",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": [
+      "https://api.openai.com",
+      "https://api.deepseek.com",
+      "https://api.moonshot.cn",
+      "https://dashscope.aliyuncs.com",
+      "https://*.maas.aliyuncs.com",
+      "https://api.anthropic.com",
+      "https://*.openai.azure.com",
+      "https://open.bigmodel.cn",
+      "https://api.lingyiwanwu.com",
+      "https://api.groq.com",
+      "https://openrouter.ai",
+      "https://aihubmix.com"
+    ],
+    "reasoning": "Users can connect their own OpenAI-compatible LLM provider for natural language batch editing. The plugin has no owned backend."
+  }
+}

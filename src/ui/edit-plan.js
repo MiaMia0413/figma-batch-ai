@@ -1,0 +1,354 @@
+const CONTROL_INTENT_RE = /\b(button|btn|cta|tab|tabs|chip|chips|tag|tags|badge|badges|card|cards|list item|list items|menu item|menu items|nav item|nav items|input|field|search|switch|toggle|checkbox|radio|option|selector|dropdown|toast|banner)\b|按钮|按键|控件|选项卡|标签页|标签|徽标|角标|卡片|列表项|菜单项|导航项|入口|输入框|搜索框|开关|复选框|单选框|选项|下拉|选择器|提示条|横幅/i;
+const TARGET_QUALIFIER_RE = /全部|所有|当前|选中|图层|按钮|按键|控件|选项卡|标签页|标签|徽标|角标|卡片|列表项|菜单项|导航项|入口|输入框|搜索框|开关|复选框|单选框|选项|下拉|选择器|提示条|横幅/g;
+
+export function createEditPlan(prompt) {
+  const intent = analyzeIntent(prompt);
+  return planFromIntent(intent);
+}
+
+export function enrichArgsFromPrompt(toolName, args, prompt) {
+  const plan = createEditPlan(prompt);
+  if (plan && plan.toolName === toolName) {
+    Object.assign(args, { ...plan.args, ...args });
+  }
+
+  const intent = analyzeIntent(prompt);
+  if (['batch_set_fill', 'batch_remove_fill'].includes(toolName) && intent.targetKind === 'control') {
+    args.targetKind = 'control';
+  }
+}
+
+export function normalizeTarget(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/#[0-9a-f]{3,8}\b/gi, ' ')
+    .replace(/[“”"'`#]/g, '')
+    .replace(/\b(all|every|the|selected|current|layer|layers|button|buttons|btn|cta|tab|tabs|chip|chips|tag|tags|badge|badges|card|cards|input|field|search|switch|toggle|checkbox|radio|option|selector|dropdown|toast|banner)\b/g, ' ')
+    .replace(TARGET_QUALIFIER_RE, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function analyzeIntent(prompt) {
+  const text = String(prompt || '').trim();
+  const intent = {
+    raw: text,
+    kind: 'unknown',
+    target: '',
+    scope: scopeFromText(text),
+    targetKind: hasControlIntent(text) ? 'control' : 'layer',
+    count: countFromText(text),
+    placement: placementFromText(text),
+    layout: layoutFromText(text),
+    value: null,
+    from: '',
+    to: '',
+  };
+
+  return analyzeDuplicate(intent)
+    || analyzeRemoveFill(intent)
+    || analyzeSetFill(intent)
+    || analyzeCornerRadius(intent)
+    || analyzeVisibility(intent)
+    || analyzeTextReplacement(intent)
+    || intent;
+}
+
+function planFromIntent(intent) {
+  if (!intent || intent.kind === 'unknown') return null;
+
+  const target = intent.target || intent.from;
+  if (!target) return null;
+
+  const common = {
+    target,
+    scope: intent.scope,
+  };
+
+  if (intent.kind === 'duplicate') {
+    return plan(intent, 'duplicate_layers', {
+      ...common,
+      count: intent.count,
+      placement: intent.placement,
+      layout: intent.layout,
+    });
+  }
+
+  if (intent.kind === 'set_fill') {
+    return plan(intent, 'batch_set_fill', {
+      ...common,
+      color: intent.value,
+      targetKind: intent.targetKind,
+      includeText: intent.includeText,
+      containerTarget: intent.containerTarget,
+    });
+  }
+
+  if (intent.kind === 'remove_fill') {
+    return plan(intent, 'batch_remove_fill', {
+      ...common,
+      targetKind: intent.targetKind,
+    });
+  }
+
+  if (intent.kind === 'replace_text') {
+    return plan(intent, 'batch_set_text', {
+      target: intent.from,
+      text: intent.to,
+      replaceOnly: true,
+      scope: intent.scope,
+    });
+  }
+
+  if (intent.kind === 'set_corner_radius') {
+    return plan(intent, 'batch_set_corner_radius', {
+      ...common,
+      radius: intent.value,
+    });
+  }
+
+  if (intent.kind === 'set_visible') {
+    return plan(intent, 'batch_set_visible', {
+      ...common,
+      visible: intent.value,
+    });
+  }
+
+  return null;
+}
+
+function plan(intent, toolName, args) {
+  return {
+    action: intent.kind,
+    intent,
+    toolName,
+    args,
+  };
+}
+
+function analyzeDuplicate(base) {
+  const text = base.raw;
+  const patterns = [
+    /^(?:复制|拷贝|克隆)\s*(?:(?:\d+|一|二|两|三|四|五|六|七|八|九|十)\s*(?:个|份|张)?|一份|一个|一下)?\s*(.+?)\s*$/i,
+    /^(?:将|把)\s*(.+?)\s*(?:复制|拷贝|克隆)\s*(?:(?:\d+|一|二|两|三|四|五|六|七|八|九|十)\s*(?:个|份|张)?|一份|一个|一下)?(?:.*)?$/i,
+    /^(?:duplicate|copy|clone)\s+(.+?)\s*$/i,
+  ];
+  const match = firstMatch(text, patterns);
+  if (!match) return null;
+
+  const target = cleanDuplicateTarget(match[1]);
+  if (!target) return null;
+
+  return {
+    ...base,
+    kind: 'duplicate',
+    target,
+    scope: scopeFromText(`${text} ${target}`),
+  };
+}
+
+function analyzeSetFill(base) {
+  const patterns = [
+    /^(?:将|把)\s*(.+?)\s*(?:的)?(?:色值|颜色|文字颜色|文本颜色|字体颜色|文字色|文本色)\s*(?:改成|改为|替换成|替换为|换成|变成)\s*(#[0-9a-f]{3,8})\s*$/i,
+    /^(?:将|把)\s*(.+?)\s*(?:的)?(?:背景色|底色|填充色|填充)\s*(?:改成|改为|替换成|替换为|换成|变成)\s*(#[0-9a-f]{3,8})\s*$/i,
+    /^(?:set|change)\s+(.+?)\s+(?:background|fill)\s+(?:to\s+)?(#[0-9a-f]{3,8})\s*$/i,
+  ];
+  const match = firstMatch(base.raw, patterns);
+  if (!match) return null;
+
+  const textRelation = splitContainerTextTarget(match[1]);
+  const target = cleanPart(textRelation?.child || match[1]);
+  const color = cleanPart(match[2]);
+  if (!target || !isColorValue(color)) return null;
+
+  return {
+    ...base,
+    kind: 'set_fill',
+    target,
+    containerTarget: textRelation?.container || '',
+    includeText: Boolean(textRelation) || hasTextColorIntent(base.raw, target),
+    value: color,
+    scope: scopeFromText(`${base.raw} ${target}`),
+    targetKind: hasControlIntent(target) ? 'control' : base.targetKind,
+  };
+}
+
+function analyzeRemoveFill(base) {
+  const patterns = [
+    /^(?:将|把)\s*(.+?)\s*(?:的)?(?:背景色|底色|填充色|填充)\s*(?:去掉|去除|移除|删除|清除|清空|取消|设为无|改为无|改成无)\s*$/i,
+    /^(?:去掉|去除|移除|删除|清除|清空|取消)\s*(.+?)\s*(?:的)?(?:背景色|底色|填充色|填充)\s*$/i,
+    /^(?:remove|clear|delete|unset)\s+(.+?)\s+(?:background|fill)(?:\s+color)?\s*$/i,
+  ];
+  const match = firstMatch(base.raw, patterns);
+  if (!match) return null;
+
+  const target = cleanPart(match[1]);
+  if (!target) return null;
+
+  return {
+    ...base,
+    kind: 'remove_fill',
+    target,
+    scope: scopeFromText(`${base.raw} ${target}`),
+    targetKind: hasControlIntent(target) ? 'control' : base.targetKind,
+  };
+}
+
+function analyzeTextReplacement(base) {
+  const patterns = [
+    /^(?:将|把)\s*(.+?)\s*(?:改成|改为|替换成|替换为|换成|变成)\s*(.+?)\s*$/,
+    /^change\s+(.+?)\s+to\s+(.+?)\s*$/i,
+    /^replace\s+(.+?)\s+with\s+(.+?)\s*$/i,
+  ];
+  const match = firstMatch(base.raw, patterns);
+  if (!match) return null;
+
+  const from = cleanPart(match[1]);
+  const to = cleanPart(match[2]);
+  if (!from || !to || isColorValue(to) || hasBackgroundIntent(from)) return null;
+
+  return {
+    ...base,
+    kind: 'replace_text',
+    from,
+    to,
+  };
+}
+
+function analyzeCornerRadius(base) {
+  const match = base.raw.match(/^(?:将|把)\s*(.+?)\s*(?:的)?(?:圆角|radius|corner radius)\s*(?:改成|改为|设为|设置为|变成)\s*(\d+(?:\.\d+)?)\s*(?:px|像素)?\s*$/i);
+  if (!match) return null;
+
+  const target = cleanPart(match[1]);
+  const radius = Number(match[2]);
+  if (!target || !Number.isFinite(radius)) return null;
+
+  return {
+    ...base,
+    kind: 'set_corner_radius',
+    target,
+    value: radius,
+    scope: scopeFromText(`${base.raw} ${target}`),
+  };
+}
+
+function analyzeVisibility(base) {
+  const patterns = [
+    /^(?:隐藏|hide)\s*(.+?)\s*$/i,
+    /^(?:将|把)\s*(.+?)\s*(?:隐藏|设为隐藏)\s*$/i,
+  ];
+  const match = firstMatch(base.raw, patterns);
+  if (!match) return null;
+
+  const target = cleanPart(match[1]);
+  if (!target) return null;
+
+  return {
+    ...base,
+    kind: 'set_visible',
+    target,
+    value: false,
+    scope: scopeFromText(`${base.raw} ${target}`),
+  };
+}
+
+function firstMatch(text, patterns) {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) return match;
+  }
+  return null;
+}
+
+function cleanPart(value) {
+  return String(value || '')
+    .trim()
+    .replace(/[“”‘’]/g, '')
+    .replace(/^["']+|["']+$/g, '')
+    .trim();
+}
+
+function cleanDuplicateTarget(value) {
+  return cleanPart(value)
+    .replace(/^\s*(\d+|一|二|两|三|四|五|六|七|八|九|十)\s*(?:个|份|张)?\s*/i, '')
+    .replace(/\s*(?:放在|放到|放置在|置于|在|到|至|于)\s*(?:左下角|右下角|左上角|右上角|左边|左侧|左方|右边|右侧|右方|上方|上面|顶部|下方|下面|底部).*/i, '')
+    .replace(/\s*(?:排列|横向|纵向|竖向|水平|垂直).*/i, '')
+    .trim();
+}
+
+function splitContainerTextTarget(value) {
+  const text = cleanPart(value);
+  const match = text.match(/^(.+?)(?:的|\s+)?(标题|副标题|主标题|文案|文字|文本|title|subtitle)$/i);
+  if (!match) return null;
+
+  const container = cleanPart(match[1]);
+  const child = cleanPart(match[2]);
+  if (!container || !child) return null;
+  return { container, child };
+}
+
+function hasTextColorIntent(raw, target) {
+  return /文字颜色|文本颜色|字体颜色|文字色|文本色|色值|颜色/i.test(String(raw || ''))
+    && /标题|副标题|主标题|文案|文字|文本|title|subtitle/i.test(String(target || raw || ''));
+}
+
+function countFromText(value) {
+  const text = String(value || '');
+  const match = text.match(/(?:复制|拷贝|克隆)\s*(\d+|一|二|两|三|四|五|六|七|八|九|十)\s*(?:个|份|张)?|(\d+|一|二|两|三|四|五|六|七|八|九|十)\s*(?:个|份|张)\s*(?:副本|复制|拷贝|克隆)?/i);
+  const raw = match?.[1] || match?.[2];
+  return chineseNumber(raw) || 1;
+}
+
+function placementFromText(value) {
+  const text = String(value || '');
+  if (/左下|下左|bottom\s*left/i.test(text)) return 'bottom-left';
+  if (/右下|下右|bottom\s*right/i.test(text)) return 'bottom-right';
+  if (/左上|上左|top\s*left/i.test(text)) return 'top-left';
+  if (/右上|上右|top\s*right/i.test(text)) return 'top-right';
+  if (/左边|左侧|左方|\bleft\b/i.test(text)) return 'left';
+  if (/右边|右侧|右方|\bright\b/i.test(text)) return 'right';
+  if (/下方|下面|底部|\bbottom\b|below/i.test(text)) return 'bottom';
+  if (/上方|上面|顶部|\btop\b|above/i.test(text)) return 'top';
+  return 'auto';
+}
+
+function layoutFromText(value) {
+  const text = String(value || '');
+  if (/纵向|竖向|垂直|vertical/i.test(text)) return 'vertical';
+  if (/横向|水平|horizontal/i.test(text)) return 'horizontal';
+  return 'auto';
+}
+
+function scopeFromText(value) {
+  return /选中|所选|当前选区|selected|selection/i.test(String(value || '')) ? 'selection' : 'page';
+}
+
+function chineseNumber(value) {
+  const text = String(value || '').trim();
+  if (/^\d+$/.test(text)) return Number(text);
+  return {
+    一: 1,
+    二: 2,
+    两: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+    十: 10,
+  }[text] || null;
+}
+
+function hasControlIntent(value) {
+  return CONTROL_INTENT_RE.test(String(value || ''));
+}
+
+function hasBackgroundIntent(value) {
+  return /\b(background|fill)\b|背景|底色|填充/i.test(String(value || ''));
+}
+
+function isColorValue(value) {
+  return /^#[0-9a-f]{3,8}$/i.test(String(value || '').trim());
+}

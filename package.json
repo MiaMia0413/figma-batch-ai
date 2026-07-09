@@ -1,0 +1,12 @@
+{
+  "name": "figma-batch-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A public, BYOK Figma plugin for AI-assisted batch editing, layer cleanup, and design QA.",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "node scripts/check.mjs"
+  },
+  "devDependencies": {}
+}
