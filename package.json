@@ -4,9 +4,26 @@
   "private": true,
   "description": "A public, BYOK Figma plugin for AI-assisted batch editing, layer cleanup, and design QA.",
   "type": "module",
-  "scripts": {
-    "build": "node scripts/build.mjs",
-    "check": "node scripts/check.mjs"
+  "engines": {
+    "node": ">=22"
   },
-  "devDependencies": {}
+  "scripts": {
+    "dev": "node scripts/build.mjs --watch",
+    "build": "node scripts/build.mjs",
+    "check": "node scripts/check.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "verify": "npm run format:check && npm run lint && npm test && npm run build && npm run check"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "esbuild": "^0.28.1",
+    "eslint": "^10.6.0",
+    "globals": "^17.7.0",
+    "prettier": "^3.9.5",
+    "vitest": "^4.1.10"
+  }
 }
