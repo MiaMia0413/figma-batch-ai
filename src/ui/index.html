@@ -33,7 +33,14 @@
 
       <section class="composer">
         <div id="quickActions" class="quick-actions">
-          <button id="quickActionsToggle" class="quick-actions-toggle" type="button" aria-label="展开快捷指令" aria-expanded="false" aria-controls="quickActionsList">
+          <button
+            id="quickActionsToggle"
+            class="quick-actions-toggle"
+            type="button"
+            aria-label="展开快捷指令"
+            aria-expanded="false"
+            aria-controls="quickActionsList"
+          >
             <svg class="quick-actions-arrow" viewBox="0 0 16 16" aria-hidden="true">
               <path d="M4 6l4 4 4-4" />
             </svg>
@@ -65,11 +72,25 @@
           Endpoint 地址
           <input id="endpoint" type="url" placeholder="https://api.openai.com/v1" />
           <span class="quick-buttons" aria-label="Endpoint 快捷选项">
-            <button type="button" data-target="endpoint" data-value="https://api.openai.com/v1">OpenAI</button>
-            <button type="button" data-target="endpoint" data-value="https://api.deepseek.com/v1">DeepSeek</button>
-            <button type="button" data-target="endpoint" data-value="https://dashscope.aliyuncs.com/compatible-mode/v1">DashScope</button>
-            <button type="button" data-target="endpoint" data-value="https://open.bigmodel.cn/api/paas/v4">Zhipu</button>
-            <button type="button" data-target="endpoint" data-value="https://openrouter.ai/api/v1">OpenRouter</button>
+            <button type="button" data-target="endpoint" data-value="https://api.openai.com/v1">
+              OpenAI
+            </button>
+            <button type="button" data-target="endpoint" data-value="https://api.deepseek.com/v1">
+              DeepSeek
+            </button>
+            <button
+              type="button"
+              data-target="endpoint"
+              data-value="https://dashscope.aliyuncs.com/compatible-mode/v1"
+            >
+              DashScope
+            </button>
+            <button type="button" data-target="endpoint" data-value="https://open.bigmodel.cn/api/paas/v4">
+              Zhipu
+            </button>
+            <button type="button" data-target="endpoint" data-value="https://openrouter.ai/api/v1">
+              OpenRouter
+            </button>
           </span>
         </label>
         <label>
@@ -92,7 +113,7 @@
     </aside>
 
     <script>
-      __SCRIPT__
+      __SCRIPT__;
     </script>
   </body>
 </html>

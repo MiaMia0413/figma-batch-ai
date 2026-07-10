@@ -1,3 +1,5 @@
+import { ValidationError } from '../shared/errors.js';
+
 export const STORAGE_KEY = 'figma-batch-ai-settings-v1';
 
 export const DEFAULT_SETTINGS = {
@@ -14,9 +16,9 @@ export async function saveSettings(args) {
   const next = normalizeSettings(args);
 
   if (!next.endpoint || !/^https:\/\//i.test(next.endpoint)) {
-    throw new Error('Endpoint 必须以 https:// 开头。');
+    throw new ValidationError('Endpoint 必须以 https:// 开头。');
   }
-  if (!next.model) throw new Error('请填写模型名称。');
+  if (!next.model) throw new ValidationError('请填写模型名称。');
 
   await figma.clientStorage.setAsync(STORAGE_KEY, next);
   return {

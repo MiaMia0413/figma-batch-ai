@@ -1,16 +1,18 @@
 import { increment, rgbToHex } from '../utils.js';
-import { collectNodes, scopedRoots, MAX_QA_NODES } from '../selection.js';
+import { collectNodesAsync, scopedRoots, MAX_QA_NODES } from '../selection.js';
 
-export async function designQaCheck(args = {}) {
+export async function designQaCheck(args = {}, context) {
   const roots = scopedRoots(args.scope);
-  const collected = collectNodes(roots.nodes, MAX_QA_NODES);
+  const collected = await collectNodesAsync(roots.nodes, MAX_QA_NODES, context);
   const nodes = collected.nodes;
   const issues = [];
   const fillCounts = new Map();
   const textSizes = new Map();
   let unnamedCount = 0;
 
+  await context?.yieldToHost();
   for (const node of nodes) {
+    await context?.yieldIfNeeded();
     if (/^(rectangle|frame|group|text|vector|instance)\s*\d*$/i.test(node.name || '')) {
       unnamedCount++;
       issues.push(issue('命名', node, '图层名称过于通用，建议改成能描述其用途的名称。'));

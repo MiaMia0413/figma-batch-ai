@@ -1,3 +1,4 @@
+import { ERROR_CODES } from '../shared/errors.js';
 import { createFigmaBridge } from './figma-bridge.js';
 import { createSettingsPanel } from './settings-panel.js';
 import { SYSTEM_PROMPT } from './tools.js';
@@ -56,15 +57,18 @@ async function init() {
 }
 
 function renderWelcome() {
-  appendMessage('assistant', [
-    '你可以直接描述想修改的设计稿内容，不必先选中图层。选中图层只会作为缩小范围的辅助方式。',
-    '',
-    '示例：',
-    '- 将所有主按钮背景色改成 #4BC430',
-    '- 把所有兑换按钮文案改成“去使用”',
-    '- 将选中的卡片圆角改成 12px',
-    '- 检查当前设计稿中的设计一致性问题',
-  ].join('\n'));
+  appendMessage(
+    'assistant',
+    [
+      '你可以直接描述想修改的设计稿内容，不必先选中图层。选中图层只会作为缩小范围的辅助方式。',
+      '',
+      '示例：',
+      '- 将所有主按钮背景色改成 #4BC430',
+      '- 把所有兑换按钮文案改成“去使用”',
+      '- 将选中的卡片圆角改成 12px',
+      '- 检查当前设计稿中的设计一致性问题',
+    ].join('\n'),
+  );
 }
 
 async function runPrompt(rawPrompt) {
@@ -175,7 +179,11 @@ function setQuickActionsOpen(open) {
 }
 
 function isAbortError(error) {
-  return error?.name === 'AbortError' || /aborted|abort|停止/.test(String(error?.message || ''));
+  return (
+    error?.code === ERROR_CODES.CANCELLED ||
+    error?.name === 'AbortError' ||
+    /aborted|abort|停止/.test(String(error?.message || ''))
+  );
 }
 
 function $(id) {

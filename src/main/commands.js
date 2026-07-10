@@ -1,5 +1,8 @@
+import { validateToolArguments } from '../shared/command-protocol.js';
+import { TOOL_REGISTRY, TOOL_REGISTRY_BY_NAME } from '../shared/tool-registry.js';
+import { COMMAND_NAMES, PREVIEW_HANDLER_NAMES } from './command-names.js';
 import { getSettings, saveSettings } from './settings.js';
-import { collectNodes, MAX_CANVAS_NODES, scopedRoots, summarizeNode } from './selection.js';
+import { collectNodesAsync, MAX_CANVAS_NODES, scopedRoots, summarizeNode } from './selection.js';
 import {
   batchRenameLayers,
   batchRemoveFill,
@@ -12,31 +15,83 @@ import {
   previewBatchEdit,
 } from './tools/batch-edit.js';
 import { designQaCheck } from './tools/design-qa.js';
-import { duplicateLayers } from './tools/duplicate.js';
+import { duplicateLayers, previewDuplicateLayers } from './tools/duplicate.js';
+
+const PREVIEW_HANDLERS = {
+  batch: ({ name, args, context }) => previewBatchEdit(name, args, context),
+  duplicate: ({ args, context }) => previewDuplicateLayers(args, context),
+};
 
 export const COMMANDS = {
   get_settings: getSettings,
   save_settings: saveSettings,
-  inspect_canvas: inspectCanvas,
+  inspect_canvas: validatedTool('inspect_canvas', inspectCanvas),
   inspect_selection: inspectCanvas,
-  preview_batch_edit: previewBatchEdit,
-  batch_set_text: batchSetText,
-  batch_set_fill: batchSetFill,
-  batch_remove_fill: batchRemoveFill,
-  batch_set_corner_radius: batchSetCornerRadius,
-  batch_set_opacity: batchSetOpacity,
-  batch_set_visible: batchSetVisible,
-  batch_resize: batchResize,
-  batch_rename_layers: batchRenameLayers,
-  duplicate_layers: duplicateLayers,
-  design_qa_check: designQaCheck,
+  preview_batch_edit: previewTool,
+  batch_set_text: validatedTool('batch_set_text', batchSetText),
+  batch_set_fill: validatedTool('batch_set_fill', batchSetFill),
+  batch_remove_fill: validatedTool('batch_remove_fill', batchRemoveFill),
+  batch_set_corner_radius: validatedTool('batch_set_corner_radius', batchSetCornerRadius),
+  batch_set_opacity: validatedTool('batch_set_opacity', batchSetOpacity),
+  batch_set_visible: validatedTool('batch_set_visible', batchSetVisible),
+  batch_resize: validatedTool('batch_resize', batchResize),
+  batch_rename_layers: validatedTool('batch_rename_layers', batchRenameLayers),
+  duplicate_layers: validatedTool('duplicate_layers', duplicateLayers),
+  design_qa_check: validatedTool('design_qa_check', designQaCheck),
   list_available_fonts: listAvailableFonts,
   notify: notifyUser,
 };
 
-async function inspectCanvas(args = {}) {
+assertCommandRegistry();
+
+function previewTool(args = {}, context) {
+  const name = String(args.toolName || '');
+  const metadata = TOOL_REGISTRY_BY_NAME.get(name);
+  const handler = metadata && PREVIEW_HANDLERS[metadata.preview];
+  if (!handler) throw new Error(`不支持预览该工具：${name}`);
+
+  const toolArgs = args.toolArgs && typeof args.toolArgs === 'object' ? args.toolArgs : {};
+  validateToolArguments(name, toolArgs, { allowInternal: true });
+  return handler({ name, args: toolArgs, context });
+}
+
+function validatedTool(name, handler) {
+  return (args = {}, context) => {
+    validateToolArguments(name, args, { allowInternal: true });
+    return handler(args, context);
+  };
+}
+
+function assertCommandRegistry() {
+  const handlerNames = Object.keys(COMMANDS);
+  if (
+    handlerNames.length !== COMMAND_NAMES.length ||
+    handlerNames.some((name) => !COMMAND_NAMES.includes(name))
+  ) {
+    throw new Error('COMMANDS handlers must match COMMAND_NAMES.');
+  }
+
+  for (const { name } of TOOL_REGISTRY) {
+    if (!COMMANDS[name]) throw new Error(`LLM tool is missing a command handler: ${name}`);
+  }
+
+  const previewHandlerNames = Object.keys(PREVIEW_HANDLERS);
+  if (
+    previewHandlerNames.length !== PREVIEW_HANDLER_NAMES.length ||
+    previewHandlerNames.some((name) => !PREVIEW_HANDLER_NAMES.includes(name))
+  ) {
+    throw new Error('Preview handlers must match PREVIEW_HANDLER_NAMES.');
+  }
+}
+
+async function inspectCanvas(args = {}, context) {
   const roots = scopedRoots(args.scope);
-  const collected = collectNodes(roots.nodes, Math.min(Number(args.limit) || 120, MAX_CANVAS_NODES));
+  const collected = await collectNodesAsync(
+    roots.nodes,
+    Math.min(Number(args.limit) || 120, MAX_CANVAS_NODES),
+    context,
+  );
+  await context?.yieldToHost();
   return {
     scope: roots.scope,
     sourceCount: roots.sourceCount,
@@ -51,8 +106,9 @@ function notifyUser(args) {
   return { notified: true };
 }
 
-async function listAvailableFonts() {
+async function listAvailableFonts(_args, context) {
   const fonts = await figma.listAvailableFontsAsync();
+  context?.checkCancelled();
   const seen = new Set();
   return fonts
     .map((item) => item.fontName)

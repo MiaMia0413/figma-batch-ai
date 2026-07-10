@@ -1,4 +1,5 @@
 import { COMMANDS } from './commands.js';
+import { createCommandDispatcher } from './command-dispatcher.js';
 
 figma.showUI(__html__, {
   width: 420,
@@ -6,21 +7,16 @@ figma.showUI(__html__, {
   themeColors: true,
 });
 
-figma.ui.onmessage = async (message) => {
-  if (!message || message.type !== 'command') return;
-  const { id, command, args = {} } = message;
+const dispatcher = createCommandDispatcher({
+  handlers: COMMANDS,
+  onResult: (message) => figma.ui.postMessage(message),
+});
 
-  try {
-    const handler = COMMANDS[command];
-    if (!handler) throw new Error(`不支持的命令：${command}`);
-    const result = await handler(args);
-    figma.ui.postMessage({ type: 'command-result', id, ok: true, result });
-  } catch (error) {
-    figma.ui.postMessage({
-      type: 'command-result',
-      id,
-      ok: false,
-      error: error instanceof Error ? error.message : String(error),
-    });
+figma.ui.onmessage = (message) => {
+  if (!message) return;
+  if (message.type === 'cancel') {
+    dispatcher.cancel(message.id);
+    return;
   }
+  if (message.type === 'command') void dispatcher.enqueue(message);
 };

@@ -1,3 +1,5 @@
+import { validateToolArguments } from '../shared/command-protocol.js';
+import { ValidationError } from '../shared/errors.js';
 import { chatCompletion } from './model-client.js';
 import { createEditPlan, enrichArgsFromPrompt, normalizeTarget } from './edit-plan.js';
 import { CONFIRM_TOOLS, TOOLS } from './tools.js';
@@ -13,6 +15,7 @@ export async function runToolLoop({ settings, messages, bridge, appendMessage, s
   throwIfAborted(signal);
 
   if (plan) {
+    validateToolArguments(plan.toolName, plan.args, { allowInternal: true });
     const runner = CONFIRM_TOOLS.has(plan.toolName) ? runConfirmedTool : runSimpleTool;
     const result = await runner(plan.toolName, { ...plan.args }, bridge, appendMessage, signal);
     return result.skipped ? result.reason : result.message || '编辑已完成。';
@@ -37,6 +40,7 @@ export async function runToolLoop({ settings, messages, bridge, appendMessage, s
       if (!TOOLS.some((item) => item.function.name === name)) {
         throw new Error(`模型调用了不支持的工具：${name}`);
       }
+      validateToolArguments(name, args);
 
       enrichArgsFromPrompt(name, args, userPrompt);
 
@@ -97,10 +101,10 @@ async function runConfirmedTool(name, args, bridge, appendMessage, signal) {
 }
 
 async function previewConfirmedTool(name, args, bridge, signal) {
-  const preview = await bridge.call('preview_batch_edit', { toolName: name, toolArgs: args });
+  const preview = await bridge.call('preview_batch_edit', { toolName: name, toolArgs: args }, { signal });
   throwIfAborted(signal);
   if (preview.fontIssues?.length) {
-    preview.availableFonts = await bridge.call('list_available_fonts');
+    preview.availableFonts = await bridge.call('list_available_fonts', {}, { signal });
   }
   return preview;
 }
@@ -108,7 +112,7 @@ async function previewConfirmedTool(name, args, bridge, signal) {
 async function runSimpleTool(name, args, bridge, appendMessage, signal) {
   throwIfAborted(signal);
   appendMessage('tool', `正在执行 ${name} ${JSON.stringify(args)}`);
-  const result = await bridge.call(name, args);
+  const result = await bridge.call(name, args, { signal });
   throwIfAborted(signal);
   appendMessage('tool', result.message || `${name} 已完成。`);
   return result;
@@ -153,7 +157,10 @@ function confirmTool(name, args, preview, bridge, appendMessage, signal) {
           currentPreview = nextPreview;
           Object.assign(args, nextArgs);
           deepSearchUsed = true;
-          appendMessage('tool', nextPreview.message || `深度检索预览到 ${nextPreview.targetCount || 0} 个图层。`);
+          appendMessage(
+            'tool',
+            nextPreview.message || `深度检索预览到 ${nextPreview.targetCount || 0} 个图层。`,
+          );
           panel.innerHTML = confirmationMarkup(name, args, currentPreview, { deepSearchUsed });
           bindActions();
           controls().confirmButton.focus();
@@ -190,11 +197,14 @@ function confirmationMarkup(name, args, preview, state = {}) {
   const deepSearchNote = state.deepSearchUsed
     ? '<p class="edit-confirm-note">已启用深度检索，并已重新选中最新匹配图层。</p>'
     : '<p class="edit-confirm-note">深度检索会保留当前范围并提高扫描上限，请在预览偏少时使用。</p>';
-  const error = state.error
-    ? `<p class="edit-confirm-error">${escapeHtml(state.error)}</p>`
-    : '';
+  const error = state.error ? `<p class="edit-confirm-error">${escapeHtml(state.error)}</p>` : '';
   const list = nodes.length
-    ? nodes.map((node) => `<li><span>${escapeHtml(node.name || '(未命名)')}</span><em>${escapeHtml(node.type || '')}</em></li>`).join('')
+    ? nodes
+        .map(
+          (node) =>
+            `<li><span>${escapeHtml(node.name || '(未命名)')}</span><em>${escapeHtml(node.type || '')}</em></li>`,
+        )
+        .join('')
     : '<li><span>暂无图层详情</span><em></em></li>';
 
   return [
@@ -231,12 +241,14 @@ function fontPickerMarkup(preview) {
 
   const fonts = Array.isArray(preview.availableFonts) ? preview.availableFonts : [];
   const options = fonts.length
-    ? fonts.map((font) => {
-      const family = escapeHtml(font.family);
-      const style = escapeHtml(font.style);
-      const value = escapeHtml(encodeFontValue(font));
-      return `<option value="${value}">${family} ${style}</option>`;
-    }).join('')
+    ? fonts
+        .map((font) => {
+          const family = escapeHtml(font.family);
+          const style = escapeHtml(font.style);
+          const value = escapeHtml(encodeFontValue(font));
+          return `<option value="${value}">${family} ${style}</option>`;
+        })
+        .join('')
     : '<option value="">没有找到可用字体</option>';
 
   return [
@@ -261,7 +273,7 @@ function safeJson(raw) {
   try {
     return JSON.parse(raw || '{}');
   } catch {
-    return {};
+    throw new ValidationError('模型返回了无效的工具参数 JSON。');
   }
 }
 
@@ -310,10 +322,16 @@ function escapeHtml(value) {
 }
 
 function encodeFontValue(font) {
-  return btoa(unescape(encodeURIComponent(JSON.stringify({
-    family: font.family,
-    style: font.style,
-  }))));
+  return btoa(
+    unescape(
+      encodeURIComponent(
+        JSON.stringify({
+          family: font.family,
+          style: font.style,
+        }),
+      ),
+    ),
+  );
 }
 
 function decodeFontValue(value) {

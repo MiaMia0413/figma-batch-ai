@@ -1,7 +1,9 @@
+import { ValidationError } from '../shared/errors.js';
+
 export function finiteNumber(value, name, min, max) {
   const number = Number(value);
-  if (!Number.isFinite(number)) throw new Error(`${name} 必须是数字。`);
-  if (number < min || number > max) throw new Error(`${name} 必须在 ${min} 到 ${max} 之间。`);
+  if (!Number.isFinite(number)) throw new ValidationError(`${name} 必须是数字。`);
+  if (number < min || number > max) throw new ValidationError(`${name} 必须在 ${min} 到 ${max} 之间。`);
   return number;
 }
 
@@ -18,15 +20,22 @@ export function parseHexColor(value) {
 export function normalizeHex(value) {
   const raw = String(value || '').trim();
   const match = raw.match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
-  if (!match) throw new Error('颜色必须是类似 #2563EB 的十六进制色值。');
-  const hex = match[1].length === 3
-    ? match[1].split('').map((char) => char + char).join('')
-    : match[1];
+  if (!match) throw new ValidationError('颜色必须是类似 #2563EB 的十六进制色值。');
+  const hex =
+    match[1].length === 3
+      ? match[1]
+          .split('')
+          .map((char) => char + char)
+          .join('')
+      : match[1];
   return `#${hex.toUpperCase()}`;
 }
 
 export function rgbToHex(color) {
-  const toHex = (value) => Math.round(value * 255).toString(16).padStart(2, '0');
+  const toHex = (value) =>
+    Math.round(value * 255)
+      .toString(16)
+      .padStart(2, '0');
   return `#${toHex(color.r)}${toHex(color.g)}${toHex(color.b)}`.toUpperCase();
 }
 

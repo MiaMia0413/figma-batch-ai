@@ -1,5 +1,4 @@
-const CONTROL_INTENT_RE = /\b(button|btn|cta|tab|tabs|chip|chips|tag|tags|badge|badges|card|cards|list item|list items|menu item|menu items|nav item|nav items|input|field|search|switch|toggle|checkbox|radio|option|selector|dropdown|toast|banner)\b|按钮|按键|控件|选项卡|标签页|标签|徽标|角标|卡片|列表项|菜单项|导航项|入口|输入框|搜索框|开关|复选框|单选框|选项|下拉|选择器|提示条|横幅/i;
-const TARGET_QUALIFIER_RE = /全部|所有|当前|选中|图层|按钮|按键|控件|选项卡|标签页|标签|徽标|角标|卡片|列表项|菜单项|导航项|入口|输入框|搜索框|开关|复选框|单选框|选项|下拉|选择器|提示条|横幅/g;
+import { hasControlTargetIntent, normalizeTargetQuery } from '../shared/target-utils.js';
 
 export function createEditPlan(prompt) {
   const intent = analyzeIntent(prompt);
@@ -19,14 +18,7 @@ export function enrichArgsFromPrompt(toolName, args, prompt) {
 }
 
 export function normalizeTarget(value) {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/#[0-9a-f]{3,8}\b/gi, ' ')
-    .replace(/[“”"'`#]/g, '')
-    .replace(/\b(all|every|the|selected|current|layer|layers|button|buttons|btn|cta|tab|tabs|chip|chips|tag|tags|badge|badges|card|cards|input|field|search|switch|toggle|checkbox|radio|option|selector|dropdown|toast|banner)\b/g, ' ')
-    .replace(TARGET_QUALIFIER_RE, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return normalizeTargetQuery(value, { stripHexColors: true });
 }
 
 function analyzeIntent(prompt) {
@@ -45,13 +37,15 @@ function analyzeIntent(prompt) {
     to: '',
   };
 
-  return analyzeDuplicate(intent)
-    || analyzeRemoveFill(intent)
-    || analyzeSetFill(intent)
-    || analyzeCornerRadius(intent)
-    || analyzeVisibility(intent)
-    || analyzeTextReplacement(intent)
-    || intent;
+  return (
+    analyzeDuplicate(intent) ||
+    analyzeRemoveFill(intent) ||
+    analyzeSetFill(intent) ||
+    analyzeCornerRadius(intent) ||
+    analyzeVisibility(intent) ||
+    analyzeTextReplacement(intent) ||
+    intent
+  );
 }
 
 function planFromIntent(intent) {
@@ -216,7 +210,9 @@ function analyzeTextReplacement(base) {
 }
 
 function analyzeCornerRadius(base) {
-  const match = base.raw.match(/^(?:将|把)\s*(.+?)\s*(?:的)?(?:圆角|radius|corner radius)\s*(?:改成|改为|设为|设置为|变成)\s*(\d+(?:\.\d+)?)\s*(?:px|像素)?\s*$/i);
+  const match = base.raw.match(
+    /^(?:将|把)\s*(.+?)\s*(?:的)?(?:圆角|radius|corner radius)\s*(?:改成|改为|设为|设置为|变成)\s*(\d+(?:\.\d+)?)\s*(?:px|像素)?\s*$/i,
+  );
   if (!match) return null;
 
   const target = cleanPart(match[1]);
@@ -233,10 +229,7 @@ function analyzeCornerRadius(base) {
 }
 
 function analyzeVisibility(base) {
-  const patterns = [
-    /^(?:隐藏|hide)\s*(.+?)\s*$/i,
-    /^(?:将|把)\s*(.+?)\s*(?:隐藏|设为隐藏)\s*$/i,
-  ];
+  const patterns = [/^(?:隐藏|hide)\s*(.+?)\s*$/i, /^(?:将|把)\s*(.+?)\s*(?:隐藏|设为隐藏)\s*$/i];
   const match = firstMatch(base.raw, patterns);
   if (!match) return null;
 
@@ -271,7 +264,10 @@ function cleanPart(value) {
 function cleanDuplicateTarget(value) {
   return cleanPart(value)
     .replace(/^\s*(\d+|一|二|两|三|四|五|六|七|八|九|十)\s*(?:个|份|张)?\s*/i, '')
-    .replace(/\s*(?:放在|放到|放置在|置于|在|到|至|于)\s*(?:左下角|右下角|左上角|右上角|左边|左侧|左方|右边|右侧|右方|上方|上面|顶部|下方|下面|底部).*/i, '')
+    .replace(
+      /\s*(?:放在|放到|放置在|置于|在|到|至|于)\s*(?:左下角|右下角|左上角|右上角|左边|左侧|左方|右边|右侧|右方|上方|上面|顶部|下方|下面|底部).*/i,
+      '',
+    )
     .replace(/\s*(?:排列|横向|纵向|竖向|水平|垂直).*/i, '')
     .trim();
 }
@@ -288,13 +284,17 @@ function splitContainerTextTarget(value) {
 }
 
 function hasTextColorIntent(raw, target) {
-  return /文字颜色|文本颜色|字体颜色|文字色|文本色|色值|颜色/i.test(String(raw || ''))
-    && /标题|副标题|主标题|文案|文字|文本|title|subtitle/i.test(String(target || raw || ''));
+  return (
+    /文字颜色|文本颜色|字体颜色|文字色|文本色|色值|颜色/i.test(String(raw || '')) &&
+    /标题|副标题|主标题|文案|文字|文本|title|subtitle/i.test(String(target || raw || ''))
+  );
 }
 
 function countFromText(value) {
   const text = String(value || '');
-  const match = text.match(/(?:复制|拷贝|克隆)\s*(\d+|一|二|两|三|四|五|六|七|八|九|十)\s*(?:个|份|张)?|(\d+|一|二|两|三|四|五|六|七|八|九|十)\s*(?:个|份|张)\s*(?:副本|复制|拷贝|克隆)?/i);
+  const match = text.match(
+    /(?:复制|拷贝|克隆)\s*(\d+|一|二|两|三|四|五|六|七|八|九|十)\s*(?:个|份|张)?|(\d+|一|二|两|三|四|五|六|七|八|九|十)\s*(?:个|份|张)\s*(?:副本|复制|拷贝|克隆)?/i,
+  );
   const raw = match?.[1] || match?.[2];
   return chineseNumber(raw) || 1;
 }
@@ -326,23 +326,25 @@ function scopeFromText(value) {
 function chineseNumber(value) {
   const text = String(value || '').trim();
   if (/^\d+$/.test(text)) return Number(text);
-  return {
-    一: 1,
-    二: 2,
-    两: 2,
-    三: 3,
-    四: 4,
-    五: 5,
-    六: 6,
-    七: 7,
-    八: 8,
-    九: 9,
-    十: 10,
-  }[text] || null;
+  return (
+    {
+      一: 1,
+      二: 2,
+      两: 2,
+      三: 3,
+      四: 4,
+      五: 5,
+      六: 6,
+      七: 7,
+      八: 8,
+      九: 9,
+      十: 10,
+    }[text] || null
+  );
 }
 
 function hasControlIntent(value) {
-  return CONTROL_INTENT_RE.test(String(value || ''));
+  return hasControlTargetIntent(value);
 }
 
 function hasBackgroundIntent(value) {
