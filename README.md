@@ -7,7 +7,7 @@ Figma Batch AI 是一个注重隐私的 Figma 插件，可通过自然语言完�
 - 通过自然语言定位并批量编辑已有设计稿：文本、填充、圆角、透明度、尺寸和名称。
 - 选中图层可作为第二交互方式，用于缩小编辑范围；选中 Frame/Group 时会继续向内检索可修改的子图层。
 - 通过“先预览再执行”的安全流程清理图层名称。
-- 对命名、文本一致性、颜色使用和间距进行轻量级设计 QA 检查。
+- 对命名、空文本、颜色数量和字号数量进行轻量级设计 QA 检查。
 - 使用你自己的 OpenAI 兼容模型端点和 API key。
 
 ## 设计目标
@@ -19,10 +19,10 @@ Figma Batch AI 是一个注重隐私的 Figma 插件，可通过自然语言完�
 
 ## 快速开始
 
-1. 构建并检查插件产物：
+1. 安装依赖并完成工程验证：
    ```sh
-   npm run build
-   npm run check
+   npm install
+   npm run verify
    ```
 2. 打开 Figma 桌面版。
 3. 前往 **Plugins -> Development -> Import plugin from manifest...**
@@ -41,11 +41,14 @@ FigmaBatchAI/
     main.js              # 生成的 Figma 主线程 bundle
     ui.html              # 生成的 Figma UI bundle
   src/
+    shared/              # UI 与主线程共享的纯工具函数
     main/                # Figma 沙箱源码模块
       index.js
+      command-dispatcher.js
       commands.js
       settings.js
-      selection.js
+      selection/         # 范围、遍历、显式目标与基础匹配
+      targets/           # 语义锚点、背景、容器和文本角色
       tools/
     ui/                  # 插件 UI 源码模块
       index.html
@@ -60,11 +63,22 @@ FigmaBatchAI/
     product-engineering-handbook.md
                          # 产品定位、匹配规则和工程守则
   scripts/
-    build.mjs            # 无运行时依赖的构建脚本
+    build.mjs            # esbuild 双入口构建与 UI 内联
     check.mjs            # 校验生成的插件文件
+  tests/                 # Vitest 单元与轻量集成测试
 ```
 
-源码被拆成小型原生 JavaScript 模块。`npm run build` 会生成 Figma 可加载的单文件产物到 `dist/`，这样既保留可维护的工程结构，也不引入前端框架运行时。
+源码被拆成小型原生 JavaScript 模块。`src/shared/` 只放 UI 与主线程都能复用的纯函数，避免命令、安全和匹配逻辑漂移。esbuild 会从 UI 和主线程入口自动解析依赖，并生成 Figma 可加载的单文件产物到 `dist/`。
+
+常用工程命令：
+
+```sh
+npm run dev          # 监听源码并重建 dist
+npm test             # 运行 Vitest
+npm run lint         # 运行 ESLint
+npm run format:check # 检查 Prettier 格式
+npm run verify       # 完整质量门禁
+```
 
 开发新能力前，先对照 `docs/product-engineering-handbook.md`，确保产品定位、匹配策略、安全边界和通用性没有跑偏。
 
@@ -82,5 +96,5 @@ FigmaBatchAI/
 
 - 插件不会内置任何 API key。
 - API 请求会直接从 Figma 插件 UI 发送到用户配置的端点。
-- 工具执行仅限于 `src/main/commands.js` 中的命令允许列表。
-- 大范围编辑会在执行前确认；未选中图层时默认面向当前页面，选中图层时可作为范围限制。
+- 工具执行仅限于 `src/main/commands.js` 中的命令允许列表；`npm run check` 会校验 UI 工具 schema 与主线程 allowlist 的一致性。
+- 大范围编辑和复制类高影响操作会在执行前确认；未选中图层时默认面向当前页面，选中图层时可作为范围限制。
