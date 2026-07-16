@@ -16,9 +16,12 @@ export async function batchSetText(args, context) {
   const replaceOnly = Boolean(args.replaceOnly);
   const targetText = String(args.target || args.targetQuery || '');
   const { changed, skipped } = await runNodeBatch(nodes, context, async (node) => {
-    await loadFontsForTextNode(node, args.fallbackFont);
+    const fontChanged = await loadFontsForTextNode(node, args.fallbackFont);
+    if (fontChanged) context?.markMutated?.();
     context?.checkCancelled();
-    node.characters = replaceOnly && targetText ? replaceText(node.characters, targetText, text) : text;
+    const nextText = replaceOnly && targetText ? replaceText(node.characters, targetText, text) : text;
+    if (nextText === node.characters) return fontChanged;
+    node.characters = nextText;
   });
 
   return withTargetMeta(targets, { changed, skipped, message: messageFor('已更新文本', changed, targets) });
@@ -36,6 +39,7 @@ export async function batchSetFill(args, context) {
   const { targets } = await planBatchEdit('batch_set_fill', args, context);
   const nodes = targets.nodes;
   const { changed, skipped } = await runNodeBatch(nodes, context, (node) => {
+    if (hasEquivalentSolidFill(node, paint)) return false;
     node.fills = [paint];
   });
 
@@ -51,6 +55,7 @@ export async function batchRemoveFill(args, context) {
   const { targets } = await planBatchEdit('batch_remove_fill', args, context);
   const nodes = targets.nodes;
   const { changed, skipped } = await runNodeBatch(nodes, context, (node) => {
+    if (Array.isArray(node.fills) && node.fills.length === 0) return false;
     node.fills = [];
   });
 
@@ -66,6 +71,7 @@ export async function batchSetCornerRadius(args, context) {
   const { targets } = await planBatchEdit('batch_set_corner_radius', args, context);
   const nodes = targets.nodes;
   const { changed, skipped } = await runNodeBatch(nodes, context, (node) => {
+    if (numbersEqual(node.cornerRadius, radius)) return false;
     node.cornerRadius = radius;
   });
 
@@ -82,6 +88,7 @@ export async function batchSetOpacity(args, context) {
   const { targets } = await planBatchEdit('batch_set_opacity', args, context);
   const nodes = targets.nodes;
   const { changed, skipped } = await runNodeBatch(nodes, context, (node) => {
+    if (numbersEqual(node.opacity, opacity)) return false;
     node.opacity = opacity;
   });
 
@@ -99,6 +106,7 @@ export async function batchSetVisible(args, context) {
   const nodes = targets.nodes;
   const { changed, skipped } = await runNodeBatch(nodes, context, (node) => {
     if (!('visible' in node)) return false;
+    if (node.visible === visible) return false;
     node.visible = visible;
   });
 
@@ -120,6 +128,7 @@ export async function batchResize(args, context) {
   const { changed, skipped } = await runNodeBatch(nodes, context, (node) => {
     const nextWidth = width ?? node.width;
     const nextHeight = height ?? node.height;
+    if (numbersEqual(node.width, nextWidth) && numbersEqual(node.height, nextHeight)) return false;
     node.resize(nextWidth, nextHeight);
   });
 
@@ -141,7 +150,9 @@ export async function batchRenameLayers(args, context) {
   if (mode === 'list') {
     const { changed, skipped } = await runNodeBatch(nodes, context, (node, index) => {
       if (!names[index]) return false;
-      node.name = names[index].slice(0, 80);
+      const nextName = names[index].slice(0, 80);
+      if (node.name === nextName) return false;
+      node.name = nextName;
     });
     return withTargetMeta(targets, {
       changed,
@@ -154,9 +165,12 @@ export async function batchRenameLayers(args, context) {
   if (!text) throw new ValidationError('前缀、后缀或替换模式需要填写文本。');
 
   const { changed, skipped } = await runNodeBatch(nodes, context, (node, index) => {
-    if (mode === 'replace') node.name = text;
-    else if (mode === 'suffix') node.name = `${node.name} ${text}`.slice(0, 80);
-    else node.name = `${text} ${index + 1}`.slice(0, 80);
+    let nextName;
+    if (mode === 'replace') nextName = text;
+    else if (mode === 'suffix') nextName = `${node.name} ${text}`.slice(0, 80);
+    else nextName = `${text} ${index + 1}`.slice(0, 80);
+    if (node.name === nextName) return false;
+    node.name = nextName;
   });
 
   return withTargetMeta(targets, {
@@ -280,9 +294,10 @@ async function findFontIssues(nodes, context) {
 async function loadFontsForTextNode(node, fallbackFont) {
   try {
     await loadExistingFontsForTextNode(node);
+    return false;
   } catch (error) {
     if (!fallbackFont) throw error;
-    await applyFallbackFont(node, fallbackFont);
+    return applyFallbackFont(node, fallbackFont);
   }
 }
 
@@ -308,11 +323,37 @@ async function applyFallbackFont(node, fallbackFont) {
   if (!font.family || !font.style) throw new ValidationError('备用字体需要包含字体族和字重样式。');
 
   await figma.loadFontAsync(font);
+  if (fontNamesEqual(node.fontName, font)) return false;
   node.fontName = font;
+  return true;
 }
 
 function canSetFill(node) {
   return 'fills' in node && node.fills !== figma.mixed;
+}
+
+function hasEquivalentSolidFill(node, paint) {
+  if (!Array.isArray(node.fills) || node.fills.length !== 1) return false;
+  const current = node.fills[0];
+  if (current.type !== 'SOLID' || current.visible === false) return false;
+  if (current.opacity != null && !numbersEqual(current.opacity, 1)) return false;
+  if (current.blendMode && current.blendMode !== 'NORMAL') return false;
+  if (current.boundVariables && Object.keys(current.boundVariables).length) return false;
+  return colorsEqual(current.color, paint.color);
+}
+
+function colorsEqual(left, right) {
+  return (
+    numbersEqual(left?.r, right?.r) && numbersEqual(left?.g, right?.g) && numbersEqual(left?.b, right?.b)
+  );
+}
+
+function numbersEqual(left, right) {
+  return Number.isFinite(left) && Number.isFinite(right) && Math.abs(left - right) < 1e-6;
+}
+
+function fontNamesEqual(left, right) {
+  return left !== figma.mixed && left?.family === right.family && left?.style === right.style;
 }
 
 function normalizeFillTargetArgs(args) {

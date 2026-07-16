@@ -5,7 +5,7 @@ import { scopedRoots } from './scope.js';
 import { collectNodesAsync } from './traverse.js';
 
 export async function resolveTargets(args, predicate, options = {}) {
-  const explicit = resolveExplicitTargets(args, predicate, options);
+  const explicit = await resolveExplicitTargets(args, predicate, options);
   if (explicit) return explicit;
 
   const roots = scopedRoots(args.scope);

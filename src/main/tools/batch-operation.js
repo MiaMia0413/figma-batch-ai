@@ -14,6 +14,7 @@ export async function runNodeBatch(nodes, context, operation, options = {}) {
     try {
       const value = await operation(node, index);
       if (value === false) continue;
+      context?.markMutated?.();
       changedNodes.push(node);
       if (value !== undefined && value !== true) values.push(value);
     } catch (error) {

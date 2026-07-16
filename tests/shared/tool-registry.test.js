@@ -33,6 +33,7 @@ describe('tool registry', () => {
             additionalProperties: false,
           }),
           confirm: expect.any(Boolean),
+          mutates: expect.any(Boolean),
         }),
       );
       expect([false, 'batch', 'duplicate']).toContain(metadata.preview);
@@ -68,5 +69,27 @@ describe('tool registry', () => {
       'batch_resize',
       'batch_rename_layers',
     ]);
+  });
+
+  it('marks only confirmed canvas-writing tools as mutations', () => {
+    const mutationNames = TOOL_REGISTRY.filter(({ mutates }) => mutates).map(({ name }) => name);
+
+    expect(mutationNames).toEqual([
+      'batch_set_text',
+      'batch_set_fill',
+      'batch_remove_fill',
+      'batch_set_corner_radius',
+      'batch_set_opacity',
+      'batch_set_visible',
+      'batch_resize',
+      'batch_rename_layers',
+      'duplicate_layers',
+    ]);
+    for (const metadata of TOOL_REGISTRY.filter(({ mutates }) => mutates)) {
+      expect(metadata.confirm).toBe(true);
+      expect(metadata.preview).not.toBe(false);
+    }
+    expect(TOOL_REGISTRY_BY_NAME.get('inspect_canvas').mutates).toBe(false);
+    expect(TOOL_REGISTRY_BY_NAME.get('design_qa_check').mutates).toBe(false);
   });
 });

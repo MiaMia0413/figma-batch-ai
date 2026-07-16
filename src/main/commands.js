@@ -25,19 +25,19 @@ const PREVIEW_HANDLERS = {
 export const COMMANDS = {
   get_settings: getSettings,
   save_settings: saveSettings,
-  inspect_canvas: validatedTool('inspect_canvas', inspectCanvas),
+  inspect_canvas: registeredTool('inspect_canvas', inspectCanvas),
   inspect_selection: inspectCanvas,
   preview_batch_edit: previewTool,
-  batch_set_text: validatedTool('batch_set_text', batchSetText),
-  batch_set_fill: validatedTool('batch_set_fill', batchSetFill),
-  batch_remove_fill: validatedTool('batch_remove_fill', batchRemoveFill),
-  batch_set_corner_radius: validatedTool('batch_set_corner_radius', batchSetCornerRadius),
-  batch_set_opacity: validatedTool('batch_set_opacity', batchSetOpacity),
-  batch_set_visible: validatedTool('batch_set_visible', batchSetVisible),
-  batch_resize: validatedTool('batch_resize', batchResize),
-  batch_rename_layers: validatedTool('batch_rename_layers', batchRenameLayers),
-  duplicate_layers: validatedTool('duplicate_layers', duplicateLayers),
-  design_qa_check: validatedTool('design_qa_check', designQaCheck),
+  batch_set_text: registeredTool('batch_set_text', batchSetText),
+  batch_set_fill: registeredTool('batch_set_fill', batchSetFill),
+  batch_remove_fill: registeredTool('batch_remove_fill', batchRemoveFill),
+  batch_set_corner_radius: registeredTool('batch_set_corner_radius', batchSetCornerRadius),
+  batch_set_opacity: registeredTool('batch_set_opacity', batchSetOpacity),
+  batch_set_visible: registeredTool('batch_set_visible', batchSetVisible),
+  batch_resize: registeredTool('batch_resize', batchResize),
+  batch_rename_layers: registeredTool('batch_rename_layers', batchRenameLayers),
+  duplicate_layers: registeredTool('duplicate_layers', duplicateLayers),
+  design_qa_check: registeredTool('design_qa_check', designQaCheck),
   list_available_fonts: listAvailableFonts,
   notify: notifyUser,
 };
@@ -60,6 +60,47 @@ function validatedTool(name, handler) {
     validateToolArguments(name, args, { allowInternal: true });
     return handler(args, context);
   };
+}
+
+function registeredTool(name, handler) {
+  const metadata = TOOL_REGISTRY_BY_NAME.get(name);
+  const validated = validatedTool(name, handler);
+  if (!metadata?.mutates) return validated;
+
+  return async (args = {}, context) => {
+    let mutated = false;
+    const trackedContext = {
+      ...context,
+      markMutated() {
+        mutated = true;
+        context?.markMutated?.();
+      },
+    };
+    let result;
+
+    try {
+      result = await validated(args, trackedContext);
+    } catch (error) {
+      if (mutated) figma.commitUndo();
+      throw error;
+    }
+
+    mutated ||= Number(result?.changed) > 0;
+    if (!mutated) return result;
+
+    figma.commitUndo();
+    return {
+      ...result,
+      undoCommitted: true,
+      message: undoableMessage(result.message),
+    };
+  };
+}
+
+function undoableMessage(message) {
+  const text = String(message || '').trim();
+  const hint = '可在 Figma 中撤销本次操作。';
+  return text ? `${text} ${hint}` : hint;
 }
 
 function assertCommandRegistry() {

@@ -49,6 +49,22 @@ describe('createEditPlan', () => {
     });
   });
 
+  it.each([
+    ['把选中的卡片宽度改成 320px', { toolName: 'batch_resize', args: { width: 320 } }],
+    ['把选中的卡片尺寸改成 320x200', { toolName: 'batch_resize', args: { width: 320, height: 200 } }],
+    ['将所有按钮透明度改成 50%', { toolName: 'batch_set_opacity', args: { opacity: 0.5 } }],
+    ['显示所有隐藏的提示条', { toolName: 'batch_set_visible', args: { visible: true } }],
+  ])('plans explicit property edits: %s', (prompt, expected) => {
+    expect(createEditPlan(prompt)).toMatchObject(expected);
+  });
+
+  it.each(['把主按钮改成胶囊按钮', '把主按钮的边框颜色改成 #ff0000', '把标题改成欢迎回来'])(
+    'defers ambiguous or unsupported edits to the model: %s',
+    (prompt) => {
+      expect(createEditPlan(prompt)).toBeNull();
+    },
+  );
+
   it('returns null for unsupported free-form requests', () => {
     expect(createEditPlan('让整个页面看起来更高级')).toBeNull();
   });

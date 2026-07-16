@@ -19,7 +19,7 @@ export const TOOL_REGISTRY = [
       limit: { type: 'number', description: 'Optional maximum number of nodes to inspect.' },
     }),
   ),
-  entry(
+  mutationEntry(
     'batch_set_text',
     'Replace matching text layers with the same text, or replace only the matched substring when replaceOnly is true. For "change A to B" requests, use target=A, text=B, replaceOnly=true.',
     targetParameters(
@@ -32,10 +32,9 @@ export const TOOL_REGISTRY = [
       },
       ['text'],
     ),
-    true,
     'batch',
   ),
-  entry(
+  mutationEntry(
     'batch_set_fill',
     'Set solid fill color on the most likely background layer inside each matching target container. Skips text by default.',
     targetParameters(
@@ -53,17 +52,15 @@ export const TOOL_REGISTRY = [
       },
       ['color'],
     ),
-    true,
     'batch',
   ),
-  entry(
+  mutationEntry(
     'batch_remove_fill',
     'Remove fills from the most likely background layer inside each matching target container. Use this for remove/clear/delete/unset background or fill color requests.',
     targetParameters({}),
-    true,
     'batch',
   ),
-  entry(
+  mutationEntry(
     'batch_set_corner_radius',
     'Set corner radius on matching layers that support it.',
     targetParameters(
@@ -72,10 +69,9 @@ export const TOOL_REGISTRY = [
       },
       ['radius'],
     ),
-    true,
     'batch',
   ),
-  entry(
+  mutationEntry(
     'batch_set_opacity',
     'Set opacity on matching layers.',
     targetParameters(
@@ -84,10 +80,9 @@ export const TOOL_REGISTRY = [
       },
       ['opacity'],
     ),
-    true,
     'batch',
   ),
-  entry(
+  mutationEntry(
     'batch_set_visible',
     'Show or hide matching layers.',
     targetParameters(
@@ -96,20 +91,18 @@ export const TOOL_REGISTRY = [
       },
       ['visible'],
     ),
-    true,
     'batch',
   ),
-  entry(
+  mutationEntry(
     'batch_resize',
     'Resize matching resizable layers.',
     targetParameters({
       width: { type: 'number', description: 'Optional width in pixels.' },
       height: { type: 'number', description: 'Optional height in pixels.' },
     }),
-    true,
     'batch',
   ),
-  entry(
+  mutationEntry(
     'batch_rename_layers',
     'Rename matching layers with prefix, suffix, replace, or list mode.',
     targetParameters(
@@ -124,10 +117,9 @@ export const TOOL_REGISTRY = [
       },
       ['mode'],
     ),
-    true,
     'batch',
   ),
-  entry(
+  mutationEntry(
     'duplicate_layers',
     'Duplicate matching layers, frames, artboards, modules, or the current selection. Honors requested count, placement, and layout when provided, while avoiding overlap. With auto layout, left/right placement arranges copies horizontally, and top/bottom placement arranges copies vertically.',
     targetParameters({
@@ -153,7 +145,6 @@ export const TOOL_REGISTRY = [
         description: 'How multiple copies should be arranged from the preferred placement.',
       },
     }),
-    true,
     'duplicate',
   ),
   entry(
@@ -165,8 +156,17 @@ export const TOOL_REGISTRY = [
 
 export const TOOL_REGISTRY_BY_NAME = new Map(TOOL_REGISTRY.map((metadata) => [metadata.name, metadata]));
 
-function entry(name, description, parameters, confirm = false, preview = false) {
-  return { name, description, parameters, confirm, preview };
+function mutationEntry(name, description, parameters, preview) {
+  return entry(name, description, parameters, {
+    confirm: true,
+    preview,
+    mutates: true,
+  });
+}
+
+function entry(name, description, parameters, options = {}) {
+  const { confirm = false, preview = false, mutates = false } = options;
+  return { name, description, parameters, confirm, preview, mutates };
 }
 
 function targetParameters(properties, required = []) {

@@ -42,6 +42,8 @@ function analyzeIntent(prompt) {
     analyzeRemoveFill(intent) ||
     analyzeSetFill(intent) ||
     analyzeCornerRadius(intent) ||
+    analyzeOpacity(intent) ||
+    analyzeResize(intent) ||
     analyzeVisibility(intent) ||
     analyzeTextReplacement(intent) ||
     intent
@@ -101,6 +103,21 @@ function planFromIntent(intent) {
     });
   }
 
+  if (intent.kind === 'set_opacity') {
+    return plan(intent, 'batch_set_opacity', {
+      ...common,
+      opacity: intent.value,
+    });
+  }
+
+  if (intent.kind === 'resize') {
+    return plan(intent, 'batch_resize', {
+      ...common,
+      ...(intent.width == null ? {} : { width: intent.width }),
+      ...(intent.height == null ? {} : { height: intent.height }),
+    });
+  }
+
   if (intent.kind === 'set_visible') {
     return plan(intent, 'batch_set_visible', {
       ...common,
@@ -142,6 +159,8 @@ function analyzeDuplicate(base) {
 }
 
 function analyzeSetFill(base) {
+  if (hasStrokeIntent(base.raw)) return null;
+
   const patterns = [
     /^(?:将|把)\s*(.+?)\s*(?:的)?(?:色值|颜色|文字颜色|文本颜色|字体颜色|文字色|文本色)\s*(?:改成|改为|替换成|替换为|换成|变成)\s*(#[0-9a-f]{3,8})\s*$/i,
     /^(?:将|把)\s*(.+?)\s*(?:的)?(?:背景色|底色|填充色|填充)\s*(?:改成|改为|替换成|替换为|换成|变成)\s*(#[0-9a-f]{3,8})\s*$/i,
@@ -199,7 +218,16 @@ function analyzeTextReplacement(base) {
 
   const from = cleanPart(match[1]);
   const to = cleanPart(match[2]);
-  if (!from || !to || isColorValue(to) || hasBackgroundIntent(from)) return null;
+  if (
+    !from ||
+    !to ||
+    isColorValue(to) ||
+    hasDesignPropertyIntent(from) ||
+    hasControlIntent(from) ||
+    hasTextRoleIntent(from)
+  ) {
+    return null;
+  }
 
   return {
     ...base,
@@ -228,19 +256,97 @@ function analyzeCornerRadius(base) {
   };
 }
 
-function analyzeVisibility(base) {
-  const patterns = [/^(?:隐藏|hide)\s*(.+?)\s*$/i, /^(?:将|把)\s*(.+?)\s*(?:隐藏|设为隐藏)\s*$/i];
+function analyzeOpacity(base) {
+  const patterns = [
+    /^(?:将|把)\s*(.+?)\s*(?:的)?(?:透明度|不透明度)\s*(?:改成|改为|设为|设置为|变成)\s*(\d+(?:\.\d+)?)\s*(%)?\s*$/i,
+    /^(?:set|change)\s+(.+?)\s+opacity\s+(?:to\s+)?(\d+(?:\.\d+)?)\s*(%)?\s*$/i,
+  ];
   const match = firstMatch(base.raw, patterns);
   if (!match) return null;
 
   const target = cleanPart(match[1]);
+  const rawValue = Number(match[2]);
+  const opacity = match[3] ? rawValue / 100 : rawValue;
+  if (!target || !Number.isFinite(opacity) || opacity < 0 || opacity > 1) return null;
+
+  return {
+    ...base,
+    kind: 'set_opacity',
+    target,
+    value: opacity,
+    scope: scopeFromText(`${base.raw} ${target}`),
+  };
+}
+
+function analyzeResize(base) {
+  const dimensionPatterns = [
+    {
+      pattern:
+        /^(?:将|把)\s*(.+?)\s*(?:的)?宽度\s*(?:改成|改为|设为|设置为|变成)\s*(\d+(?:\.\d+)?)\s*(?:px|像素)?\s*$/i,
+      dimension: 'width',
+    },
+    {
+      pattern:
+        /^(?:将|把)\s*(.+?)\s*(?:的)?高度\s*(?:改成|改为|设为|设置为|变成)\s*(\d+(?:\.\d+)?)\s*(?:px|像素)?\s*$/i,
+      dimension: 'height',
+    },
+  ];
+
+  for (const { pattern, dimension } of dimensionPatterns) {
+    const match = base.raw.match(pattern);
+    if (!match) continue;
+    const target = cleanPart(match[1]);
+    const value = Number(match[2]);
+    if (!target || !Number.isFinite(value) || value <= 0) return null;
+    return {
+      ...base,
+      kind: 'resize',
+      target,
+      [dimension]: value,
+      scope: scopeFromText(`${base.raw} ${target}`),
+    };
+  }
+
+  const sizeMatch = base.raw.match(
+    /^(?:将|把)\s*(.+?)\s*(?:的)?(?:尺寸|大小)\s*(?:改成|改为|设为|设置为|变成)\s*(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(?:px|像素)?\s*$/i,
+  );
+  if (!sizeMatch) return null;
+
+  const target = cleanPart(sizeMatch[1]);
+  const width = Number(sizeMatch[2]);
+  const height = Number(sizeMatch[3]);
+  if (!target || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return null;
+  }
+
+  return {
+    ...base,
+    kind: 'resize',
+    target,
+    width,
+    height,
+    scope: scopeFromText(`${base.raw} ${target}`),
+  };
+}
+
+function analyzeVisibility(base) {
+  const hidePatterns = [/^(?:隐藏|hide)\s*(.+?)\s*$/i, /^(?:将|把)\s*(.+?)\s*(?:隐藏|设为隐藏)\s*$/i];
+  const showPatterns = [/^(?:显示|show|unhide)\s*(.+?)\s*$/i, /^(?:将|把)\s*(.+?)\s*(?:显示|设为可见)\s*$/i];
+  const hiddenMatch = firstMatch(base.raw, hidePatterns);
+  const shownMatch = hiddenMatch ? null : firstMatch(base.raw, showPatterns);
+  const match = hiddenMatch || shownMatch;
+  if (!match) return null;
+
+  const target = cleanPart(match[1])
+    .replace(/隐藏的?|hidden/gi, '')
+    .trim();
   if (!target) return null;
 
   return {
     ...base,
     kind: 'set_visible',
     target,
-    value: false,
+    value: Boolean(shownMatch),
     scope: scopeFromText(`${base.raw} ${target}`),
   };
 }
@@ -279,7 +385,7 @@ function splitContainerTextTarget(value) {
 
   const container = cleanPart(match[1]);
   const child = cleanPart(match[2]);
-  if (!container || !child) return null;
+  if (!container || !child || /^(?:所有|全部|当前|选中|所选)$/i.test(container)) return null;
   return { container, child };
 }
 
@@ -347,8 +453,18 @@ function hasControlIntent(value) {
   return hasControlTargetIntent(value);
 }
 
-function hasBackgroundIntent(value) {
-  return /\b(background|fill)\b|背景|底色|填充/i.test(String(value || ''));
+function hasStrokeIntent(value) {
+  return /\b(border|stroke|outline)\b|边框|描边|轮廓/i.test(String(value || ''));
+}
+
+function hasTextRoleIntent(value) {
+  return /\b(title|subtitle|copy|label|text)\b|标题|副标题|主标题|文案|文字|文本/i.test(String(value || ''));
+}
+
+function hasDesignPropertyIntent(value) {
+  return /\b(width|height|size|opacity|radius|color|background|fill|border|stroke|layout|spacing|padding|margin|visible|visibility)\b|宽度|高度|尺寸|大小|透明度|不透明度|圆角|颜色|色值|背景|底色|填充|边框|描边|布局|间距|内边距|外边距|可见|隐藏/i.test(
+    String(value || ''),
+  );
 }
 
 function isColorValue(value) {

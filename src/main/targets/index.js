@@ -18,7 +18,7 @@ import { semanticResult } from './result.js';
 const SEMANTIC_SCAN_LIMIT = Math.max(MAX_TEXT_SCAN_NODES, 12000);
 
 export async function resolveSemanticTargets(args, action, predicate, options = {}) {
-  const explicit = resolveExplicitTargets(args, predicate, {
+  const explicit = await resolveExplicitTargets(args, predicate, {
     ...options,
     limit: options.limit || SEMANTIC_SCAN_LIMIT,
     scanFloor: SEMANTIC_SCAN_LIMIT,

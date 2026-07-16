@@ -1,11 +1,46 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { duplicateLayers } from '../../src/main/tools/duplicate.js';
+import { duplicateLayers, previewDuplicateLayers } from '../../src/main/tools/duplicate.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
 describe('duplicateLayers', () => {
+  it('treats first-person selected-content wording as the current selection', async () => {
+    const source = {
+      id: 'source',
+      name: 'Module',
+      type: 'FRAME',
+      clone: vi.fn(),
+    };
+    const page = {
+      id: 'page',
+      type: 'PAGE',
+      selection: [source],
+      children: [source],
+    };
+    vi.stubGlobal('figma', {
+      currentPage: page,
+      viewport: { scrollAndZoomIntoView: vi.fn() },
+    });
+    const context = {
+      checkCancelled: vi.fn(),
+      yieldIfNeeded: vi.fn(),
+      yieldToHost: vi.fn(),
+    };
+
+    const preview = await previewDuplicateLayers(
+      { target: '我选中的内容', scope: 'selection', count: 2 },
+      context,
+    );
+
+    expect(preview).toMatchObject({
+      targetCount: 1,
+      copyCount: 2,
+      nodeIds: ['source'],
+    });
+  });
+
   it('keeps a requested vertical copy group to the right without overlap', async () => {
     const document = { id: 'document', type: 'DOCUMENT', parent: null };
     const page = {

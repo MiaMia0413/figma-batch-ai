@@ -83,6 +83,9 @@ function assertToolRegistryConsistency() {
   assertUnique(toolNames, 'LLM tool');
 
   for (const metadata of TOOL_REGISTRY) {
+    if (typeof metadata.mutates !== 'boolean') {
+      throw new Error(`LLM tool is missing mutation metadata: ${metadata.name}`);
+    }
     if (!COMMAND_NAMES.includes(metadata.name)) {
       throw new Error(`LLM tool is missing from command handlers: ${metadata.name}`);
     }
@@ -91,6 +94,9 @@ function assertToolRegistryConsistency() {
     }
     if (metadata.confirm !== (metadata.preview !== false)) {
       throw new Error(`LLM tool confirmation and preview metadata disagree: ${metadata.name}`);
+    }
+    if (metadata.mutates && (!metadata.confirm || metadata.preview === false)) {
+      throw new Error(`Mutating LLM tool must require preview and confirmation: ${metadata.name}`);
     }
   }
 }

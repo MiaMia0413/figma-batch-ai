@@ -10,7 +10,9 @@ import {
 describe('target-utils', () => {
   it.each([
     ['所有主按钮图层', '主'],
+    ['所有按钮', '按钮'],
     ['all primary buttons', 'primary'],
+    ['all buttons', 'button'],
     ['所有 Checkout CTA', 'checkout'],
   ])('normalizes target qualifiers: %s', (input, expected) => {
     expect(normalizeTargetQuery(input)).toBe(expected);
@@ -38,6 +40,10 @@ describe('target-utils', () => {
 
   it('matches normalized multi-part queries across node fields', () => {
     expect(matchesTargetQuery(['Checkout / Primary_Button', '立即支付'], 'primary checkout')).toBe(true);
+    expect(matchesTargetQuery(['Checkout / Primary_Button', '立即支付'], 'all primary buttons')).toBe(true);
+    expect(matchesTargetQuery(['Primary Button'], '所有按钮')).toBe(true);
+    expect(matchesTargetQuery(['Primary Button'], '所有卡片')).toBe(false);
+    expect(matchesTargetQuery(['Product Card'], '所有卡片')).toBe(true);
     expect(matchesTargetQuery(['Checkout / Primary_Button', '立即支付'], 'secondary checkout')).toBe(false);
   });
 
@@ -45,6 +51,8 @@ describe('target-utils', () => {
     ['复制两个登录卡片到右下角', '登录卡片'],
     ['selected Hero frame', 'hero'],
     ['主按钮横向复制一份', '主按钮'],
+    ['我选中的内容', ''],
+    ['我当前所选的模块', ''],
   ])('removes duplicate-only language: %s', (input, expected) => {
     expect(normalizeDuplicateTargetQuery(input)).toBe(expected);
   });

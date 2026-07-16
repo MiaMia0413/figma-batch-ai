@@ -761,7 +761,7 @@ select {
         limit: { type: "number", description: "Optional maximum number of nodes to inspect." }
       })
     ),
-    entry(
+    mutationEntry(
       "batch_set_text",
       'Replace matching text layers with the same text, or replace only the matched substring when replaceOnly is true. For "change A to B" requests, use target=A, text=B, replaceOnly=true.',
       targetParameters(
@@ -774,10 +774,9 @@ select {
         },
         ["text"]
       ),
-      true,
       "batch"
     ),
-    entry(
+    mutationEntry(
       "batch_set_fill",
       "Set solid fill color on the most likely background layer inside each matching target container. Skips text by default.",
       targetParameters(
@@ -794,17 +793,15 @@ select {
         },
         ["color"]
       ),
-      true,
       "batch"
     ),
-    entry(
+    mutationEntry(
       "batch_remove_fill",
       "Remove fills from the most likely background layer inside each matching target container. Use this for remove/clear/delete/unset background or fill color requests.",
       targetParameters({}),
-      true,
       "batch"
     ),
-    entry(
+    mutationEntry(
       "batch_set_corner_radius",
       "Set corner radius on matching layers that support it.",
       targetParameters(
@@ -813,10 +810,9 @@ select {
         },
         ["radius"]
       ),
-      true,
       "batch"
     ),
-    entry(
+    mutationEntry(
       "batch_set_opacity",
       "Set opacity on matching layers.",
       targetParameters(
@@ -825,10 +821,9 @@ select {
         },
         ["opacity"]
       ),
-      true,
       "batch"
     ),
-    entry(
+    mutationEntry(
       "batch_set_visible",
       "Show or hide matching layers.",
       targetParameters(
@@ -837,20 +832,18 @@ select {
         },
         ["visible"]
       ),
-      true,
       "batch"
     ),
-    entry(
+    mutationEntry(
       "batch_resize",
       "Resize matching resizable layers.",
       targetParameters({
         width: { type: "number", description: "Optional width in pixels." },
         height: { type: "number", description: "Optional height in pixels." }
       }),
-      true,
       "batch"
     ),
-    entry(
+    mutationEntry(
       "batch_rename_layers",
       "Rename matching layers with prefix, suffix, replace, or list mode.",
       targetParameters(
@@ -865,10 +858,9 @@ select {
         },
         ["mode"]
       ),
-      true,
       "batch"
     ),
-    entry(
+    mutationEntry(
       "duplicate_layers",
       "Duplicate matching layers, frames, artboards, modules, or the current selection. Honors requested count, placement, and layout when provided, while avoiding overlap. With auto layout, left/right placement arranges copies horizontally, and top/bottom placement arranges copies vertically.",
       targetParameters({
@@ -894,7 +886,6 @@ select {
           description: "How multiple copies should be arranged from the preferred placement."
         }
       }),
-      true,
       "duplicate"
     ),
     entry(
@@ -904,8 +895,16 @@ select {
     )
   ];
   var TOOL_REGISTRY_BY_NAME = new Map(TOOL_REGISTRY.map((metadata) => [metadata.name, metadata]));
-  function entry(name, description, parameters2, confirm = false, preview = false) {
-    return { name, description, parameters: parameters2, confirm, preview };
+  function mutationEntry(name, description, parameters2, preview) {
+    return entry(name, description, parameters2, {
+      confirm: true,
+      preview,
+      mutates: true
+    });
+  }
+  function entry(name, description, parameters2, options = {}) {
+    const { confirm = false, preview = false, mutates = false } = options;
+    return { name, description, parameters: parameters2, confirm, preview, mutates };
   }
   function targetParameters(properties, required = []) {
     return parameters(
@@ -1059,9 +1058,28 @@ select {
   }
 
   // src/shared/target-utils.js
-  var CONTROL_TARGET_RE = /\b(button|btn|cta|tab|tabs|chip|chips|tag|tags|badge|badges|card|cards|list item|list items|menu item|menu items|nav item|nav items|input|field|search|switch|toggle|checkbox|radio|option|selector|dropdown|toast|banner)\b|按钮|按键|控件|选项卡|标签页|标签|徽标|角标|卡片|列表项|菜单项|导航项|入口|输入框|搜索框|开关|复选框|单选框|选项|下拉|选择器|提示条|横幅/i;
-  var TARGET_QUALIFIER_RE = /全部|所有|当前|选中|图层|按钮|按键|控件|选项卡|标签页|标签|徽标|角标|卡片|列表项|菜单项|导航项|入口|输入框|搜索框|开关|复选框|单选框|选项|下拉|选择器|提示条|横幅/g;
-  var ENGLISH_TARGET_QUALIFIER_RE = /\b(all|every|the|selected|current|layer|layers|button|buttons|btn|cta|tab|tabs|chip|chips|tag|tags|badge|badges|card|cards|input|field|search|switch|toggle|checkbox|radio|option|selector|dropdown|toast|banner)\b/g;
+  var CONTROL_TARGET_RE = /\b(button|buttons|btn|cta|tab|tabs|chip|chips|tag|tags|badge|badges|card|cards|list item|list items|menu item|menu items|nav item|nav items|input|inputs|field|fields|search|switch|switches|toggle|toggles|checkbox|checkboxes|radio|radios|option|options|selector|selectors|dropdown|dropdowns|toast|toasts|banner|banners)\b|按钮|按键|控件|选项卡|标签页|标签|徽标|角标|卡片|列表项|菜单项|导航项|入口|输入框|搜索框|开关|复选框|单选框|选项|下拉|选择器|提示条|横幅/i;
+  var TARGET_QUALIFIER_RE = /全部|所有|当前|选中|所选|图层|按钮|按键|控件|选项卡|标签页|标签|徽标|角标|卡片|列表项|菜单项|导航项|入口|输入框|搜索框|开关|复选框|单选框|选项|下拉|选择器|提示条|横幅/g;
+  var ENGLISH_TARGET_QUALIFIER_RE = /\b(all|every|the|selected|current|layer|layers|button|buttons|btn|cta|tab|tabs|chip|chips|tag|tags|badge|badges|card|cards|list item|list items|menu item|menu items|nav item|nav items|input|field|search|switch|toggle|checkbox|radio|option|selector|dropdown|toast|banner)\b/g;
+  var GENERIC_TARGET_PREFIX_RE = /全部|所有|当前|选中|所选|图层|的/g;
+  var ENGLISH_GENERIC_TARGET_PREFIX_RE = /\b(all|every|the|selected|current|layer|layers)\b/g;
+  var CONTROL_CATEGORIES = [
+    ["button", /\b(?:button|buttons|btn|cta)\b|按钮|按键/i],
+    ["tab", /\b(?:tab|tabs)\b|选项卡|标签页/i],
+    ["tag", /\b(?:chip|chips|tag|tags|badge|badges)\b|标签|徽标|角标/i],
+    ["card", /\b(?:card|cards)\b|卡片/i],
+    ["list-item", /\blist items?\b|列表项/i],
+    ["menu-item", /\bmenu items?\b|菜单项/i],
+    ["nav-item", /\bnav items?\b|导航项/i],
+    ["input", /\b(?:input|inputs|field|fields|search)\b|输入框|搜索框/i],
+    ["switch", /\b(?:switch|switches|toggle|toggles)\b|开关/i],
+    ["checkbox", /\b(?:checkbox|checkboxes)\b|复选框/i],
+    ["radio", /\b(?:radio|radios)\b|单选框/i],
+    ["option", /\b(?:option|options|selector|selectors|dropdown|dropdowns)\b|选项|下拉|选择器/i],
+    ["toast", /\b(?:toast|toasts)\b|提示条/i],
+    ["banner", /\b(?:banner|banners)\b|横幅/i],
+    ["control", /控件|入口/i]
+  ];
   function hasControlTargetIntent(value) {
     return CONTROL_TARGET_RE.test(String(value || ""));
   }
@@ -1069,9 +1087,31 @@ select {
     const { stripHexColors = false, stripPossessive = false } = options;
     let text = String(value || "");
     if (stripHexColors) text = text.replace(/#[0-9a-f]{3,8}\b/gi, " ");
-    text = text.toLowerCase().replace(/[“”‘’"'`#]/g, " ").replace(ENGLISH_TARGET_QUALIFIER_RE, " ").replace(TARGET_QUALIFIER_RE, " ");
+    const normalized = text.toLowerCase().replace(/[“”‘’"'`#]/g, " ").replace(ENGLISH_TARGET_QUALIFIER_RE, " ").replace(TARGET_QUALIFIER_RE, " ").replace(/\s+/g, " ").trim();
+    text = normalized || genericControlTarget(text);
     if (stripPossessive) text = text.replace(/[的]/g, " ");
     return text.replace(/\s+/g, " ").trim();
+  }
+  function genericControlTarget(value) {
+    const text = genericControlText(value);
+    if (!text || !genericControlCategory(value)) return "";
+    return text.replace(/\bbuttons\b/g, "button").replace(/\bcards\b/g, "card");
+  }
+  function genericControlCategory(value) {
+    var _a;
+    const text = genericControlText(value);
+    if (!text) return "";
+    const categories = controlCategories(text);
+    if (categories.length !== 1) return "";
+    const pattern = (_a = CONTROL_CATEGORIES.find(([category]) => category === categories[0])) == null ? void 0 : _a[1];
+    return pattern && !text.replace(pattern, " ").replace(/\s+/g, " ").trim() ? categories[0] : "";
+  }
+  function genericControlText(value) {
+    return String(value || "").toLowerCase().replace(/[“”‘’"'`#]/g, " ").replace(ENGLISH_GENERIC_TARGET_PREFIX_RE, " ").replace(GENERIC_TARGET_PREFIX_RE, " ").replace(/\s+/g, " ").trim();
+  }
+  function controlCategories(value) {
+    const text = String(value || "");
+    return CONTROL_CATEGORIES.filter(([, pattern]) => pattern.test(text)).map(([category]) => category);
   }
 
   // src/ui/edit-plan.js
@@ -1107,7 +1147,7 @@ select {
       from: "",
       to: ""
     };
-    return analyzeDuplicate(intent) || analyzeRemoveFill(intent) || analyzeSetFill(intent) || analyzeCornerRadius(intent) || analyzeVisibility(intent) || analyzeTextReplacement(intent) || intent;
+    return analyzeDuplicate(intent) || analyzeRemoveFill(intent) || analyzeSetFill(intent) || analyzeCornerRadius(intent) || analyzeOpacity(intent) || analyzeResize(intent) || analyzeVisibility(intent) || analyzeTextReplacement(intent) || intent;
   }
   function planFromIntent(intent) {
     if (!intent || intent.kind === "unknown") return null;
@@ -1154,6 +1194,19 @@ select {
         radius: intent.value
       });
     }
+    if (intent.kind === "set_opacity") {
+      return plan(intent, "batch_set_opacity", {
+        ...common,
+        opacity: intent.value
+      });
+    }
+    if (intent.kind === "resize") {
+      return plan(intent, "batch_resize", {
+        ...common,
+        ...intent.width == null ? {} : { width: intent.width },
+        ...intent.height == null ? {} : { height: intent.height }
+      });
+    }
     if (intent.kind === "set_visible") {
       return plan(intent, "batch_set_visible", {
         ...common,
@@ -1189,6 +1242,7 @@ select {
     };
   }
   function analyzeSetFill(base) {
+    if (hasStrokeIntent(base.raw)) return null;
     const patterns = [
       /^(?:将|把)\s*(.+?)\s*(?:的)?(?:色值|颜色|文字颜色|文本颜色|字体颜色|文字色|文本色)\s*(?:改成|改为|替换成|替换为|换成|变成)\s*(#[0-9a-f]{3,8})\s*$/i,
       /^(?:将|把)\s*(.+?)\s*(?:的)?(?:背景色|底色|填充色|填充)\s*(?:改成|改为|替换成|替换为|换成|变成)\s*(#[0-9a-f]{3,8})\s*$/i,
@@ -1239,7 +1293,9 @@ select {
     if (!match) return null;
     const from = cleanPart(match[1]);
     const to = cleanPart(match[2]);
-    if (!from || !to || isColorValue(to) || hasBackgroundIntent(from)) return null;
+    if (!from || !to || isColorValue(to) || hasDesignPropertyIntent(from) || hasControlIntent(from) || hasTextRoleIntent(from)) {
+      return null;
+    }
     return {
       ...base,
       kind: "replace_text",
@@ -1263,17 +1319,83 @@ select {
       scope: scopeFromText(`${base.raw} ${target}`)
     };
   }
-  function analyzeVisibility(base) {
-    const patterns = [/^(?:隐藏|hide)\s*(.+?)\s*$/i, /^(?:将|把)\s*(.+?)\s*(?:隐藏|设为隐藏)\s*$/i];
+  function analyzeOpacity(base) {
+    const patterns = [
+      /^(?:将|把)\s*(.+?)\s*(?:的)?(?:透明度|不透明度)\s*(?:改成|改为|设为|设置为|变成)\s*(\d+(?:\.\d+)?)\s*(%)?\s*$/i,
+      /^(?:set|change)\s+(.+?)\s+opacity\s+(?:to\s+)?(\d+(?:\.\d+)?)\s*(%)?\s*$/i
+    ];
     const match = firstMatch(base.raw, patterns);
     if (!match) return null;
     const target = cleanPart(match[1]);
+    const rawValue = Number(match[2]);
+    const opacity = match[3] ? rawValue / 100 : rawValue;
+    if (!target || !Number.isFinite(opacity) || opacity < 0 || opacity > 1) return null;
+    return {
+      ...base,
+      kind: "set_opacity",
+      target,
+      value: opacity,
+      scope: scopeFromText(`${base.raw} ${target}`)
+    };
+  }
+  function analyzeResize(base) {
+    const dimensionPatterns = [
+      {
+        pattern: /^(?:将|把)\s*(.+?)\s*(?:的)?宽度\s*(?:改成|改为|设为|设置为|变成)\s*(\d+(?:\.\d+)?)\s*(?:px|像素)?\s*$/i,
+        dimension: "width"
+      },
+      {
+        pattern: /^(?:将|把)\s*(.+?)\s*(?:的)?高度\s*(?:改成|改为|设为|设置为|变成)\s*(\d+(?:\.\d+)?)\s*(?:px|像素)?\s*$/i,
+        dimension: "height"
+      }
+    ];
+    for (const { pattern, dimension } of dimensionPatterns) {
+      const match = base.raw.match(pattern);
+      if (!match) continue;
+      const target2 = cleanPart(match[1]);
+      const value = Number(match[2]);
+      if (!target2 || !Number.isFinite(value) || value <= 0) return null;
+      return {
+        ...base,
+        kind: "resize",
+        target: target2,
+        [dimension]: value,
+        scope: scopeFromText(`${base.raw} ${target2}`)
+      };
+    }
+    const sizeMatch = base.raw.match(
+      /^(?:将|把)\s*(.+?)\s*(?:的)?(?:尺寸|大小)\s*(?:改成|改为|设为|设置为|变成)\s*(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(?:px|像素)?\s*$/i
+    );
+    if (!sizeMatch) return null;
+    const target = cleanPart(sizeMatch[1]);
+    const width = Number(sizeMatch[2]);
+    const height = Number(sizeMatch[3]);
+    if (!target || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      return null;
+    }
+    return {
+      ...base,
+      kind: "resize",
+      target,
+      width,
+      height,
+      scope: scopeFromText(`${base.raw} ${target}`)
+    };
+  }
+  function analyzeVisibility(base) {
+    const hidePatterns = [/^(?:隐藏|hide)\s*(.+?)\s*$/i, /^(?:将|把)\s*(.+?)\s*(?:隐藏|设为隐藏)\s*$/i];
+    const showPatterns = [/^(?:显示|show|unhide)\s*(.+?)\s*$/i, /^(?:将|把)\s*(.+?)\s*(?:显示|设为可见)\s*$/i];
+    const hiddenMatch = firstMatch(base.raw, hidePatterns);
+    const shownMatch = hiddenMatch ? null : firstMatch(base.raw, showPatterns);
+    const match = hiddenMatch || shownMatch;
+    if (!match) return null;
+    const target = cleanPart(match[1]).replace(/隐藏的?|hidden/gi, "").trim();
     if (!target) return null;
     return {
       ...base,
       kind: "set_visible",
       target,
-      value: false,
+      value: Boolean(shownMatch),
       scope: scopeFromText(`${base.raw} ${target}`)
     };
   }
@@ -1299,7 +1421,7 @@ select {
     if (!match) return null;
     const container = cleanPart(match[1]);
     const child = cleanPart(match[2]);
-    if (!container || !child) return null;
+    if (!container || !child || /^(?:所有|全部|当前|选中|所选)$/i.test(container)) return null;
     return { container, child };
   }
   function hasTextColorIntent(raw, target) {
@@ -1354,8 +1476,16 @@ select {
   function hasControlIntent(value) {
     return hasControlTargetIntent(value);
   }
-  function hasBackgroundIntent(value) {
-    return /\b(background|fill)\b|背景|底色|填充/i.test(String(value || ""));
+  function hasStrokeIntent(value) {
+    return /\b(border|stroke|outline)\b|边框|描边|轮廓/i.test(String(value || ""));
+  }
+  function hasTextRoleIntent(value) {
+    return /\b(title|subtitle|copy|label|text)\b|标题|副标题|主标题|文案|文字|文本/i.test(String(value || ""));
+  }
+  function hasDesignPropertyIntent(value) {
+    return /\b(width|height|size|opacity|radius|color|background|fill|border|stroke|layout|spacing|padding|margin|visible|visibility)\b|宽度|高度|尺寸|大小|透明度|不透明度|圆角|颜色|色值|背景|底色|填充|边框|描边|布局|间距|内边距|外边距|可见|隐藏/i.test(
+      String(value || "")
+    );
   }
   function isColorValue(value) {
     return /^#[0-9a-f]{3,8}$/i.test(String(value || "").trim());
@@ -1544,7 +1674,7 @@ select {
       `<span>\u76EE\u6807\uFF1A${target}</span>`,
       `<span>\u56FE\u5C42\u6570\uFF1A${count}</span>`,
       "</div>",
-      "<p>\u8FD9\u4E9B\u56FE\u5C42\u5DF2\u5728 Figma \u4E2D\u81EA\u52A8\u9009\u4E2D\u3002\u8BF7\u68C0\u67E5\u753B\u5E03\u540E\u786E\u8BA4\u662F\u5426\u5E94\u7528\u4FEE\u6539\u3002</p>",
+      "<p>\u8FD9\u4E9B\u56FE\u5C42\u5DF2\u5728 Figma \u4E2D\u81EA\u52A8\u9009\u4E2D\u3002\u8BF7\u68C0\u67E5\u753B\u5E03\u540E\u786E\u8BA4\u662F\u5426\u5E94\u7528\u4FEE\u6539\uFF1B\u5E94\u7528\u540E\u53EF\u5728 Figma \u4E2D\u64A4\u9500\u672C\u6B21\u64CD\u4F5C\u3002</p>",
       deepSearchNote,
       error,
       fontPicker,

@@ -25,6 +25,7 @@ Requests go directly to the model endpoint configured by the user.
 - Mutation commands operate on the current selection by default.
 - Broad mutation commands require UI confirmation before execution.
 - The main thread caps selection and QA traversal sizes.
+- Successful commands that actually mutate the canvas commit an independent Figma undo boundary; read-only and zero-change commands do not.
 
 ## Recommended Public Release Checklist
 

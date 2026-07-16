@@ -93,7 +93,7 @@ export async function previewDuplicateLayers(args = {}, context) {
 }
 
 async function resolveDuplicateTargets(args, context) {
-  const explicit = resolveExplicitTargets(args, canDuplicate, {
+  const explicit = await resolveExplicitTargets(args, canDuplicate, {
     limit: MAX_DUPLICATE_TARGETS,
     normalizeQuery: normalizeDuplicateTargetQuery,
     checkCancelled: context?.checkCancelled,

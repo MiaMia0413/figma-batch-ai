@@ -215,7 +215,7 @@ function confirmationMarkup(name, args, preview, state = {}) {
     `<span>目标：${target}</span>`,
     `<span>图层数：${count}</span>`,
     '</div>',
-    '<p>这些图层已在 Figma 中自动选中。请检查画布后确认是否应用修改。</p>',
+    '<p>这些图层已在 Figma 中自动选中。请检查画布后确认是否应用修改；应用后可在 Figma 中撤销本次操作。</p>',
     deepSearchNote,
     error,
     fontPicker,

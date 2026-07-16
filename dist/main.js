@@ -76,7 +76,7 @@
         limit: { type: "number", description: "Optional maximum number of nodes to inspect." }
       })
     ),
-    entry(
+    mutationEntry(
       "batch_set_text",
       'Replace matching text layers with the same text, or replace only the matched substring when replaceOnly is true. For "change A to B" requests, use target=A, text=B, replaceOnly=true.',
       targetParameters(
@@ -89,10 +89,9 @@
         },
         ["text"]
       ),
-      true,
       "batch"
     ),
-    entry(
+    mutationEntry(
       "batch_set_fill",
       "Set solid fill color on the most likely background layer inside each matching target container. Skips text by default.",
       targetParameters(
@@ -109,17 +108,15 @@
         },
         ["color"]
       ),
-      true,
       "batch"
     ),
-    entry(
+    mutationEntry(
       "batch_remove_fill",
       "Remove fills from the most likely background layer inside each matching target container. Use this for remove/clear/delete/unset background or fill color requests.",
       targetParameters({}),
-      true,
       "batch"
     ),
-    entry(
+    mutationEntry(
       "batch_set_corner_radius",
       "Set corner radius on matching layers that support it.",
       targetParameters(
@@ -128,10 +125,9 @@
         },
         ["radius"]
       ),
-      true,
       "batch"
     ),
-    entry(
+    mutationEntry(
       "batch_set_opacity",
       "Set opacity on matching layers.",
       targetParameters(
@@ -140,10 +136,9 @@
         },
         ["opacity"]
       ),
-      true,
       "batch"
     ),
-    entry(
+    mutationEntry(
       "batch_set_visible",
       "Show or hide matching layers.",
       targetParameters(
@@ -152,20 +147,18 @@
         },
         ["visible"]
       ),
-      true,
       "batch"
     ),
-    entry(
+    mutationEntry(
       "batch_resize",
       "Resize matching resizable layers.",
       targetParameters({
         width: { type: "number", description: "Optional width in pixels." },
         height: { type: "number", description: "Optional height in pixels." }
       }),
-      true,
       "batch"
     ),
-    entry(
+    mutationEntry(
       "batch_rename_layers",
       "Rename matching layers with prefix, suffix, replace, or list mode.",
       targetParameters(
@@ -180,10 +173,9 @@
         },
         ["mode"]
       ),
-      true,
       "batch"
     ),
-    entry(
+    mutationEntry(
       "duplicate_layers",
       "Duplicate matching layers, frames, artboards, modules, or the current selection. Honors requested count, placement, and layout when provided, while avoiding overlap. With auto layout, left/right placement arranges copies horizontally, and top/bottom placement arranges copies vertically.",
       targetParameters({
@@ -209,7 +201,6 @@
           description: "How multiple copies should be arranged from the preferred placement."
         }
       }),
-      true,
       "duplicate"
     ),
     entry(
@@ -219,8 +210,16 @@
     )
   ];
   var TOOL_REGISTRY_BY_NAME = new Map(TOOL_REGISTRY.map((metadata) => [metadata.name, metadata]));
-  function entry(name, description, parameters2, confirm = false, preview = false) {
-    return { name, description, parameters: parameters2, confirm, preview };
+  function mutationEntry(name, description, parameters2, preview) {
+    return entry(name, description, parameters2, {
+      confirm: true,
+      preview,
+      mutates: true
+    });
+  }
+  function entry(name, description, parameters2, options = {}) {
+    const { confirm = false, preview = false, mutates = false } = options;
+    return { name, description, parameters: parameters2, confirm, preview, mutates };
   }
   function targetParameters(properties, required = []) {
     return parameters(
@@ -501,9 +500,28 @@
   }
 
   // src/shared/target-utils.js
-  var CONTROL_TARGET_RE = /\b(button|btn|cta|tab|tabs|chip|chips|tag|tags|badge|badges|card|cards|list item|list items|menu item|menu items|nav item|nav items|input|field|search|switch|toggle|checkbox|radio|option|selector|dropdown|toast|banner)\b|按钮|按键|控件|选项卡|标签页|标签|徽标|角标|卡片|列表项|菜单项|导航项|入口|输入框|搜索框|开关|复选框|单选框|选项|下拉|选择器|提示条|横幅/i;
-  var TARGET_QUALIFIER_RE = /全部|所有|当前|选中|图层|按钮|按键|控件|选项卡|标签页|标签|徽标|角标|卡片|列表项|菜单项|导航项|入口|输入框|搜索框|开关|复选框|单选框|选项|下拉|选择器|提示条|横幅/g;
-  var ENGLISH_TARGET_QUALIFIER_RE = /\b(all|every|the|selected|current|layer|layers|button|buttons|btn|cta|tab|tabs|chip|chips|tag|tags|badge|badges|card|cards|input|field|search|switch|toggle|checkbox|radio|option|selector|dropdown|toast|banner)\b/g;
+  var CONTROL_TARGET_RE = /\b(button|buttons|btn|cta|tab|tabs|chip|chips|tag|tags|badge|badges|card|cards|list item|list items|menu item|menu items|nav item|nav items|input|inputs|field|fields|search|switch|switches|toggle|toggles|checkbox|checkboxes|radio|radios|option|options|selector|selectors|dropdown|dropdowns|toast|toasts|banner|banners)\b|按钮|按键|控件|选项卡|标签页|标签|徽标|角标|卡片|列表项|菜单项|导航项|入口|输入框|搜索框|开关|复选框|单选框|选项|下拉|选择器|提示条|横幅/i;
+  var TARGET_QUALIFIER_RE = /全部|所有|当前|选中|所选|图层|按钮|按键|控件|选项卡|标签页|标签|徽标|角标|卡片|列表项|菜单项|导航项|入口|输入框|搜索框|开关|复选框|单选框|选项|下拉|选择器|提示条|横幅/g;
+  var ENGLISH_TARGET_QUALIFIER_RE = /\b(all|every|the|selected|current|layer|layers|button|buttons|btn|cta|tab|tabs|chip|chips|tag|tags|badge|badges|card|cards|list item|list items|menu item|menu items|nav item|nav items|input|field|search|switch|toggle|checkbox|radio|option|selector|dropdown|toast|banner)\b/g;
+  var GENERIC_TARGET_PREFIX_RE = /全部|所有|当前|选中|所选|图层|的/g;
+  var ENGLISH_GENERIC_TARGET_PREFIX_RE = /\b(all|every|the|selected|current|layer|layers)\b/g;
+  var CONTROL_CATEGORIES = [
+    ["button", /\b(?:button|buttons|btn|cta)\b|按钮|按键/i],
+    ["tab", /\b(?:tab|tabs)\b|选项卡|标签页/i],
+    ["tag", /\b(?:chip|chips|tag|tags|badge|badges)\b|标签|徽标|角标/i],
+    ["card", /\b(?:card|cards)\b|卡片/i],
+    ["list-item", /\blist items?\b|列表项/i],
+    ["menu-item", /\bmenu items?\b|菜单项/i],
+    ["nav-item", /\bnav items?\b|导航项/i],
+    ["input", /\b(?:input|inputs|field|fields|search)\b|输入框|搜索框/i],
+    ["switch", /\b(?:switch|switches|toggle|toggles)\b|开关/i],
+    ["checkbox", /\b(?:checkbox|checkboxes)\b|复选框/i],
+    ["radio", /\b(?:radio|radios)\b|单选框/i],
+    ["option", /\b(?:option|options|selector|selectors|dropdown|dropdowns)\b|选项|下拉|选择器/i],
+    ["toast", /\b(?:toast|toasts)\b|提示条/i],
+    ["banner", /\b(?:banner|banners)\b|横幅/i],
+    ["control", /控件|入口/i]
+  ];
   function hasControlTargetIntent(value) {
     return CONTROL_TARGET_RE.test(String(value || ""));
   }
@@ -511,7 +529,8 @@
     const { stripHexColors = false, stripPossessive = false } = options;
     let text = String(value || "");
     if (stripHexColors) text = text.replace(/#[0-9a-f]{3,8}\b/gi, " ");
-    text = text.toLowerCase().replace(/[“”‘’"'`#]/g, " ").replace(ENGLISH_TARGET_QUALIFIER_RE, " ").replace(TARGET_QUALIFIER_RE, " ");
+    const normalized = text.toLowerCase().replace(/[“”‘’"'`#]/g, " ").replace(ENGLISH_TARGET_QUALIFIER_RE, " ").replace(TARGET_QUALIFIER_RE, " ").replace(/\s+/g, " ").trim();
+    text = normalized || genericControlTarget(text);
     if (stripPossessive) text = text.replace(/[的]/g, " ");
     return text.replace(/\s+/g, " ").trim();
   }
@@ -520,30 +539,58 @@
   }
   function matchesTargetQuery(values, query, options = {}) {
     const normalizeQuery = options.normalizeQuery || normalizeTargetQuery;
+    const sourceValues = Array.isArray(values) ? values : [values];
+    const genericCategory = genericControlCategory(query);
+    if (genericCategory) {
+      return sourceValues.some(
+        (value) => genericCategory === "control" ? hasControlTargetIntent(value) : controlCategories(value).includes(genericCategory)
+      );
+    }
     const normalizedQuery = normalizeQuery(query);
     if (!normalizedQuery) return true;
-    const haystack = (Array.isArray(values) ? values : [values]).map(normalizeQuery).join(" ");
+    const haystack = sourceValues.map(normalizeQuery).join(" ");
     const compactHaystack = compactTargetText(haystack);
     const compactQuery = compactTargetText(normalizedQuery);
     if (haystack.includes(normalizedQuery)) return true;
     if (compactQuery && compactHaystack.includes(compactQuery)) return true;
     return normalizedQuery.split(/\s+/).filter(Boolean).every((part) => haystack.includes(part) || compactHaystack.includes(compactTargetText(part)));
   }
+  function genericControlTarget(value) {
+    const text = genericControlText(value);
+    if (!text || !genericControlCategory(value)) return "";
+    return text.replace(/\bbuttons\b/g, "button").replace(/\bcards\b/g, "card");
+  }
+  function genericControlCategory(value) {
+    var _a;
+    const text = genericControlText(value);
+    if (!text) return "";
+    const categories = controlCategories(text);
+    if (categories.length !== 1) return "";
+    const pattern = (_a = CONTROL_CATEGORIES.find(([category]) => category === categories[0])) == null ? void 0 : _a[1];
+    return pattern && !text.replace(pattern, " ").replace(/\s+/g, " ").trim() ? categories[0] : "";
+  }
+  function genericControlText(value) {
+    return String(value || "").toLowerCase().replace(/[“”‘’"'`#]/g, " ").replace(ENGLISH_GENERIC_TARGET_PREFIX_RE, " ").replace(GENERIC_TARGET_PREFIX_RE, " ").replace(/\s+/g, " ").trim();
+  }
+  function controlCategories(value) {
+    const text = String(value || "");
+    return CONTROL_CATEGORIES.filter(([, pattern]) => pattern.test(text)).map(([category]) => category);
+  }
   function normalizeDuplicateTargetQuery(value) {
-    return String(value || "").toLowerCase().replace(/[“”‘’'"`]/g, "").replace(/当前选中|当前选区|选中的|选中|所选|当前|selected|selection|current/gi, " ").replace(/复制|拷贝|克隆|一份|一个|一下|副本|的/g, " ").replace(/(\d+|一|二|两|三|四|五|六|七|八|九|十)\s*(?:个|份|张)?/g, " ").replace(
+    return String(value || "").toLowerCase().replace(/[“”‘’'"`]/g, "").replace(/我(?:当前)?选中的?|我(?:当前)?所选的?/g, " ").replace(/当前选中|当前选区|选中的|选中|所选|当前|selected|selection|current/gi, " ").replace(/复制|拷贝|克隆|一份|一个|一下|副本|的/g, " ").replace(/(\d+|一|二|两|三|四|五|六|七|八|九|十)\s*(?:个|份|张)?/g, " ").replace(
       /(?:放在|放到|放置在|置于|在|到|至|于)?\s*(?:左下角|右下角|左上角|右上角|左边|左侧|左方|右边|右侧|右方|上方|上面|顶部|下方|下面|底部)/g,
       " "
     ).replace(/放在|放到|放置在|置于|附近|旁边|周围|原版|原图|原模块|原画板/g, " ").replace(/纵向|竖向|垂直|横向|水平|排列/g, " ").replace(/画板|图层|模块|元素|内容|对象|节点|frame|layer|module|element|object|node/gi, " ").replace(/\s+/g, " ").trim();
   }
 
   // src/main/selection/explicit-targets.js
-  function resolveExplicitTargets(args, predicate, options = {}) {
+  async function resolveExplicitTargets(args, predicate, options = {}) {
     if (!Array.isArray(args.nodeIds) || !args.nodeIds.length) return null;
     const limit = options.limit || MAX_CANVAS_NODES;
     const requestedIds = [...new Set(args.nodeIds.slice(0, limit).map(String))];
     const wanted = new Set(requestedIds);
     const scanLimit = Math.max(options.scanFloor || MAX_CANVAS_NODES, args.nodeIds.length * 20);
-    const sourcesById = explicitSourcesById(requestedIds, scanLimit, options);
+    const sourcesById = await explicitSourcesById(requestedIds, scanLimit, options);
     const nodes = requestedIds.map((id) => sourcesById.get(id)).filter((node) => node && belongsToCurrentPage(node) && predicate(node));
     if (nodes.length !== wanted.size) {
       const resolved = new Set(nodes.map((node) => node.id));
@@ -565,7 +612,13 @@
       limit
     };
   }
-  function explicitSourcesById(requestedIds, scanLimit, options) {
+  async function explicitSourcesById(requestedIds, scanLimit, options) {
+    var _a;
+    if (typeof figma.getNodeByIdAsync === "function") {
+      const resolved = await Promise.all(requestedIds.map((id) => figma.getNodeByIdAsync(id)));
+      (_a = options.checkCancelled) == null ? void 0 : _a.call(options);
+      return new Map(requestedIds.map((id, index) => [id, resolved[index]]).filter(([, node]) => node));
+    }
     if (typeof figma.getNodeById === "function") {
       return new Map(requestedIds.map((id) => [id, figma.getNodeById(id)]).filter(([, node]) => node));
     }
@@ -587,7 +640,7 @@
 
   // src/main/selection/basic-match.js
   async function resolveTargets(args, predicate, options = {}) {
-    const explicit = resolveExplicitTargets(args, predicate, options);
+    const explicit = await resolveExplicitTargets(args, predicate, options);
     if (explicit) return explicit;
     const roots = scopedRoots(args.scope);
     const collected = await collectNodesAsync(roots.nodes, options.limit || MAX_CANVAS_NODES, options);
@@ -1119,7 +1172,7 @@
   // src/main/targets/index.js
   var SEMANTIC_SCAN_LIMIT = Math.max(MAX_TEXT_SCAN_NODES, 12e3);
   async function resolveSemanticTargets(args, action, predicate, options = {}) {
-    const explicit = resolveExplicitTargets(args, predicate, {
+    const explicit = await resolveExplicitTargets(args, predicate, {
       ...options,
       limit: options.limit || SEMANTIC_SCAN_LIMIT,
       scanFloor: SEMANTIC_SCAN_LIMIT,
@@ -1205,6 +1258,7 @@
 
   // src/main/tools/batch-operation.js
   async function runNodeBatch(nodes, context, operation, options = {}) {
+    var _a;
     const changedNodes = [];
     const skipped = [];
     const values = [];
@@ -1216,6 +1270,7 @@
       try {
         const value = await operation(node, index);
         if (value === false) continue;
+        (_a = context == null ? void 0 : context.markMutated) == null ? void 0 : _a.call(context);
         changedNodes.push(node);
         if (value !== void 0 && value !== true) values.push(value);
       } catch (error) {
@@ -1251,9 +1306,13 @@
     const replaceOnly = Boolean(args.replaceOnly);
     const targetText = String(args.target || args.targetQuery || "");
     const { changed, skipped } = await runNodeBatch(nodes, context, async (node) => {
-      await loadFontsForTextNode(node, args.fallbackFont);
+      var _a2;
+      const fontChanged = await loadFontsForTextNode(node, args.fallbackFont);
+      if (fontChanged) (_a2 = context == null ? void 0 : context.markMutated) == null ? void 0 : _a2.call(context);
       context == null ? void 0 : context.checkCancelled();
-      node.characters = replaceOnly && targetText ? replaceText(node.characters, targetText, text) : text;
+      const nextText = replaceOnly && targetText ? replaceText(node.characters, targetText, text) : text;
+      if (nextText === node.characters) return fontChanged;
+      node.characters = nextText;
     });
     return withTargetMeta(targets, { changed, skipped, message: messageFor("\u5DF2\u66F4\u65B0\u6587\u672C", changed, targets) });
   }
@@ -1267,6 +1326,7 @@
     const { targets } = await planBatchEdit("batch_set_fill", args, context);
     const nodes = targets.nodes;
     const { changed, skipped } = await runNodeBatch(nodes, context, (node) => {
+      if (hasEquivalentSolidFill(node, paint)) return false;
       node.fills = [paint];
     });
     return withTargetMeta(targets, {
@@ -1280,6 +1340,7 @@
     const { targets } = await planBatchEdit("batch_remove_fill", args, context);
     const nodes = targets.nodes;
     const { changed, skipped } = await runNodeBatch(nodes, context, (node) => {
+      if (Array.isArray(node.fills) && node.fills.length === 0) return false;
       node.fills = [];
     });
     return withTargetMeta(targets, {
@@ -1293,6 +1354,7 @@
     const { targets } = await planBatchEdit("batch_set_corner_radius", args, context);
     const nodes = targets.nodes;
     const { changed, skipped } = await runNodeBatch(nodes, context, (node) => {
+      if (numbersEqual(node.cornerRadius, radius)) return false;
       node.cornerRadius = radius;
     });
     return withTargetMeta(targets, {
@@ -1307,6 +1369,7 @@
     const { targets } = await planBatchEdit("batch_set_opacity", args, context);
     const nodes = targets.nodes;
     const { changed, skipped } = await runNodeBatch(nodes, context, (node) => {
+      if (numbersEqual(node.opacity, opacity)) return false;
       node.opacity = opacity;
     });
     return withTargetMeta(targets, {
@@ -1322,6 +1385,7 @@
     const nodes = targets.nodes;
     const { changed, skipped } = await runNodeBatch(nodes, context, (node) => {
       if (!("visible" in node)) return false;
+      if (node.visible === visible) return false;
       node.visible = visible;
     });
     return withTargetMeta(targets, {
@@ -1340,6 +1404,7 @@
     const { changed, skipped } = await runNodeBatch(nodes, context, (node) => {
       const nextWidth = width != null ? width : node.width;
       const nextHeight = height != null ? height : node.height;
+      if (numbersEqual(node.width, nextWidth) && numbersEqual(node.height, nextHeight)) return false;
       node.resize(nextWidth, nextHeight);
     });
     return withTargetMeta(targets, {
@@ -1359,7 +1424,9 @@
     if (mode === "list") {
       const { changed: changed2, skipped: skipped2 } = await runNodeBatch(nodes, context, (node, index) => {
         if (!names[index]) return false;
-        node.name = names[index].slice(0, 80);
+        const nextName = names[index].slice(0, 80);
+        if (node.name === nextName) return false;
+        node.name = nextName;
       });
       return withTargetMeta(targets, {
         changed: changed2,
@@ -1370,9 +1437,12 @@
     }
     if (!text) throw new ValidationError("\u524D\u7F00\u3001\u540E\u7F00\u6216\u66FF\u6362\u6A21\u5F0F\u9700\u8981\u586B\u5199\u6587\u672C\u3002");
     const { changed, skipped } = await runNodeBatch(nodes, context, (node, index) => {
-      if (mode === "replace") node.name = text;
-      else if (mode === "suffix") node.name = `${node.name} ${text}`.slice(0, 80);
-      else node.name = `${text} ${index + 1}`.slice(0, 80);
+      let nextName;
+      if (mode === "replace") nextName = text;
+      else if (mode === "suffix") nextName = `${node.name} ${text}`.slice(0, 80);
+      else nextName = `${text} ${index + 1}`.slice(0, 80);
+      if (node.name === nextName) return false;
+      node.name = nextName;
     });
     return withTargetMeta(targets, {
       changed,
@@ -1482,9 +1552,10 @@
   async function loadFontsForTextNode(node, fallbackFont) {
     try {
       await loadExistingFontsForTextNode(node);
+      return false;
     } catch (error) {
       if (!fallbackFont) throw error;
-      await applyFallbackFont(node, fallbackFont);
+      return applyFallbackFont(node, fallbackFont);
     }
   }
   async function loadExistingFontsForTextNode(node) {
@@ -1506,10 +1577,30 @@
     };
     if (!font.family || !font.style) throw new ValidationError("\u5907\u7528\u5B57\u4F53\u9700\u8981\u5305\u542B\u5B57\u4F53\u65CF\u548C\u5B57\u91CD\u6837\u5F0F\u3002");
     await figma.loadFontAsync(font);
+    if (fontNamesEqual(node.fontName, font)) return false;
     node.fontName = font;
+    return true;
   }
   function canSetFill(node) {
     return "fills" in node && node.fills !== figma.mixed;
+  }
+  function hasEquivalentSolidFill(node, paint) {
+    if (!Array.isArray(node.fills) || node.fills.length !== 1) return false;
+    const current = node.fills[0];
+    if (current.type !== "SOLID" || current.visible === false) return false;
+    if (current.opacity != null && !numbersEqual(current.opacity, 1)) return false;
+    if (current.blendMode && current.blendMode !== "NORMAL") return false;
+    if (current.boundVariables && Object.keys(current.boundVariables).length) return false;
+    return colorsEqual(current.color, paint.color);
+  }
+  function colorsEqual(left, right) {
+    return numbersEqual(left == null ? void 0 : left.r, right == null ? void 0 : right.r) && numbersEqual(left == null ? void 0 : left.g, right == null ? void 0 : right.g) && numbersEqual(left == null ? void 0 : left.b, right == null ? void 0 : right.b);
+  }
+  function numbersEqual(left, right) {
+    return Number.isFinite(left) && Number.isFinite(right) && Math.abs(left - right) < 1e-6;
+  }
+  function fontNamesEqual(left, right) {
+    return left !== figma.mixed && (left == null ? void 0 : left.family) === right.family && (left == null ? void 0 : left.style) === right.style;
   }
   function normalizeFillTargetArgs(args) {
     const relation = splitContainerTextTarget(args.target || args.targetQuery || "");
@@ -1738,7 +1829,7 @@
     };
   }
   async function resolveDuplicateTargets(args, context) {
-    const explicit = resolveExplicitTargets(args, canDuplicate, {
+    const explicit = await resolveExplicitTargets(args, canDuplicate, {
       limit: MAX_DUPLICATE_TARGETS,
       normalizeQuery: normalizeDuplicateTargetQuery,
       checkCancelled: context == null ? void 0 : context.checkCancelled
@@ -2086,19 +2177,19 @@
   var COMMANDS = {
     get_settings: getSettings,
     save_settings: saveSettings,
-    inspect_canvas: validatedTool("inspect_canvas", inspectCanvas),
+    inspect_canvas: registeredTool("inspect_canvas", inspectCanvas),
     inspect_selection: inspectCanvas,
     preview_batch_edit: previewTool,
-    batch_set_text: validatedTool("batch_set_text", batchSetText),
-    batch_set_fill: validatedTool("batch_set_fill", batchSetFill),
-    batch_remove_fill: validatedTool("batch_remove_fill", batchRemoveFill),
-    batch_set_corner_radius: validatedTool("batch_set_corner_radius", batchSetCornerRadius),
-    batch_set_opacity: validatedTool("batch_set_opacity", batchSetOpacity),
-    batch_set_visible: validatedTool("batch_set_visible", batchSetVisible),
-    batch_resize: validatedTool("batch_resize", batchResize),
-    batch_rename_layers: validatedTool("batch_rename_layers", batchRenameLayers),
-    duplicate_layers: validatedTool("duplicate_layers", duplicateLayers),
-    design_qa_check: validatedTool("design_qa_check", designQaCheck),
+    batch_set_text: registeredTool("batch_set_text", batchSetText),
+    batch_set_fill: registeredTool("batch_set_fill", batchSetFill),
+    batch_remove_fill: registeredTool("batch_remove_fill", batchRemoveFill),
+    batch_set_corner_radius: registeredTool("batch_set_corner_radius", batchSetCornerRadius),
+    batch_set_opacity: registeredTool("batch_set_opacity", batchSetOpacity),
+    batch_set_visible: registeredTool("batch_set_visible", batchSetVisible),
+    batch_resize: registeredTool("batch_resize", batchResize),
+    batch_rename_layers: registeredTool("batch_rename_layers", batchRenameLayers),
+    duplicate_layers: registeredTool("duplicate_layers", duplicateLayers),
+    design_qa_check: registeredTool("design_qa_check", designQaCheck),
     list_available_fonts: listAvailableFonts,
     notify: notifyUser
   };
@@ -2117,6 +2208,42 @@
       validateToolArguments(name, args, { allowInternal: true });
       return handler(args, context);
     };
+  }
+  function registeredTool(name, handler) {
+    const metadata = TOOL_REGISTRY_BY_NAME.get(name);
+    const validated = validatedTool(name, handler);
+    if (!(metadata == null ? void 0 : metadata.mutates)) return validated;
+    return async (args = {}, context) => {
+      let mutated = false;
+      const trackedContext = {
+        ...context,
+        markMutated() {
+          var _a;
+          mutated = true;
+          (_a = context == null ? void 0 : context.markMutated) == null ? void 0 : _a.call(context);
+        }
+      };
+      let result;
+      try {
+        result = await validated(args, trackedContext);
+      } catch (error) {
+        if (mutated) figma.commitUndo();
+        throw error;
+      }
+      mutated || (mutated = Number(result == null ? void 0 : result.changed) > 0);
+      if (!mutated) return result;
+      figma.commitUndo();
+      return {
+        ...result,
+        undoCommitted: true,
+        message: undoableMessage(result.message)
+      };
+    };
+  }
+  function undoableMessage(message) {
+    const text = String(message || "").trim();
+    const hint = "\u53EF\u5728 Figma \u4E2D\u64A4\u9500\u672C\u6B21\u64CD\u4F5C\u3002";
+    return text ? `${text} ${hint}` : hint;
   }
   function assertCommandRegistry() {
     const handlerNames = Object.keys(COMMANDS);

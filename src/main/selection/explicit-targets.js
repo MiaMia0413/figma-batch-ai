@@ -3,14 +3,14 @@ import { normalizeTargetQuery } from '../../shared/target-utils.js';
 import { MAX_CANVAS_NODES } from './limits.js';
 import { collectNodes } from './traverse.js';
 
-export function resolveExplicitTargets(args, predicate, options = {}) {
+export async function resolveExplicitTargets(args, predicate, options = {}) {
   if (!Array.isArray(args.nodeIds) || !args.nodeIds.length) return null;
 
   const limit = options.limit || MAX_CANVAS_NODES;
   const requestedIds = [...new Set(args.nodeIds.slice(0, limit).map(String))];
   const wanted = new Set(requestedIds);
   const scanLimit = Math.max(options.scanFloor || MAX_CANVAS_NODES, args.nodeIds.length * 20);
-  const sourcesById = explicitSourcesById(requestedIds, scanLimit, options);
+  const sourcesById = await explicitSourcesById(requestedIds, scanLimit, options);
   const nodes = requestedIds
     .map((id) => sourcesById.get(id))
     .filter((node) => node && belongsToCurrentPage(node) && predicate(node));
@@ -37,7 +37,13 @@ export function resolveExplicitTargets(args, predicate, options = {}) {
   };
 }
 
-function explicitSourcesById(requestedIds, scanLimit, options) {
+async function explicitSourcesById(requestedIds, scanLimit, options) {
+  if (typeof figma.getNodeByIdAsync === 'function') {
+    const resolved = await Promise.all(requestedIds.map((id) => figma.getNodeByIdAsync(id)));
+    options.checkCancelled?.();
+    return new Map(requestedIds.map((id, index) => [id, resolved[index]]).filter(([, node]) => node));
+  }
+
   if (typeof figma.getNodeById === 'function') {
     return new Map(requestedIds.map((id) => [id, figma.getNodeById(id)]).filter(([, node]) => node));
   }
