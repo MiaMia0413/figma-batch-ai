@@ -85,6 +85,10 @@
           replaceOnly: {
             type: "boolean",
             description: "Set true to replace only occurrences of target inside each matched text layer."
+          },
+          containerTarget: {
+            type: "string",
+            description: "Optional container phrase when setting a text role inside a named container, such as dialog/modal/card."
           }
         },
         ["text"]
@@ -344,6 +348,57 @@
   ];
   var PREVIEW_HANDLER_NAMES = ["batch", "duplicate"];
 
+  // src/shared/allowed-endpoints.js
+  var ALLOWED_ENDPOINT_PATTERNS = Object.freeze([
+    "https://api.openai.com",
+    "https://api.deepseek.com",
+    "https://api.moonshot.cn",
+    "https://dashscope.aliyuncs.com",
+    "https://*.maas.aliyuncs.com",
+    "https://api.anthropic.com",
+    "https://*.openai.azure.com",
+    "https://open.bigmodel.cn",
+    "https://api.lingyiwanwu.com",
+    "https://api.groq.com",
+    "https://openrouter.ai",
+    "https://aihubmix.com"
+  ]);
+  function assertAllowedEndpoint(endpoint) {
+    const value = String(endpoint || "").trim();
+    if (!/^https:\/\//i.test(value)) {
+      throw new ValidationError("Endpoint \u5FC5\u987B\u4EE5 https:// \u5F00\u5934\u3002");
+    }
+    const hostname = endpointHostname(value);
+    if (!hostname) throw new ValidationError("Endpoint \u5730\u5740\u683C\u5F0F\u65E0\u6548\u3002");
+    if (!isAllowedEndpointHost(hostname)) {
+      throw new ValidationError(
+        `Endpoint \u4E3B\u673A\u540D\u4E0D\u5728\u63D2\u4EF6\u5141\u8BB8\u7684\u7F51\u7EDC\u57DF\u540D\u5217\u8868\u4E2D\uFF1A${hostname}\u3002\u8BF7\u4F7F\u7528\u8BBE\u7F6E\u9762\u677F\u4E2D\u7684\u9884\u8BBE\u63D0\u4F9B\u5546\u3002`
+      );
+    }
+    return value;
+  }
+  function isAllowedEndpointHost(hostname) {
+    const host = String(hostname || "").trim().toLowerCase().replace(/\.$/, "");
+    if (!host) return false;
+    return ALLOWED_ENDPOINT_PATTERNS.some((pattern) => {
+      const allowedHost = pattern.slice("https://".length).toLowerCase();
+      if (!allowedHost.startsWith("*.")) return host === allowedHost;
+      const suffix = allowedHost.slice(1);
+      return host.endsWith(suffix) && host.length > suffix.length;
+    });
+  }
+  function endpointHostname(endpoint) {
+    if (/\s/.test(endpoint)) return "";
+    const match = endpoint.match(/^https:\/\/([^/?#]+)(?:[/?#]|$)/i);
+    if (!match || match[1].includes("@")) return "";
+    const parts = match[1].split(":");
+    if (parts.length > 2) return "";
+    const [hostname, port = ""] = parts;
+    if (port && port !== "443") return "";
+    if (!/^[a-z0-9.-]+$/i.test(hostname) || hostname.startsWith(".") || hostname.includes("..")) return "";
+    return hostname.toLowerCase().replace(/\.$/, "");
+  }
+
   // src/main/settings.js
   var STORAGE_KEY = "figma-batch-ai-settings-v1";
   var DEFAULT_SETTINGS = {
@@ -356,9 +411,7 @@
   }
   async function saveSettings(args) {
     const next = normalizeSettings(args);
-    if (!next.endpoint || !/^https:\/\//i.test(next.endpoint)) {
-      throw new ValidationError("Endpoint \u5FC5\u987B\u4EE5 https:// \u5F00\u5934\u3002");
-    }
+    assertAllowedEndpoint(next.endpoint);
     if (!next.model) throw new ValidationError("\u8BF7\u586B\u5199\u6A21\u578B\u540D\u79F0\u3002");
     await figma.clientStorage.setAsync(STORAGE_KEY, next);
     return {
@@ -686,6 +739,22 @@
     const parent = node.parent;
     if (!parent || parent.type === "PAGE" || parent.type === "DOCUMENT") return null;
     return parent;
+  }
+
+  // src/shared/container-text-phrase.js
+  var CONTAINER_TEXT_PATTERN = /^(.+?)(?:的|\s+)?(标题|副标题|主标题|文案|文字|文本|title|subtitle)$/i;
+  var SCOPE_ONLY_PATTERN = /^(?:所有|全部|当前|选中|所选)$/i;
+  function splitContainerTextTarget(value) {
+    const text = cleanTargetPhrase(value).replace(/(标题|副标题|主标题)(?:文案|文字|文本)$/i, "$1");
+    const match = text.match(CONTAINER_TEXT_PATTERN);
+    if (!match) return null;
+    const container = cleanTargetPhrase(match[1]);
+    const child = cleanTargetPhrase(match[2]);
+    if (!container || !child || SCOPE_ONLY_PATTERN.test(container)) return null;
+    return { container, child };
+  }
+  function cleanTargetPhrase(value) {
+    return String(value || "").trim().replace(/[“”‘’]/g, "").replace(/^["']+|["']+$/g, "").trim();
   }
 
   // src/main/targets/common.js
@@ -1436,11 +1505,11 @@
       });
     }
     if (!text) throw new ValidationError("\u524D\u7F00\u3001\u540E\u7F00\u6216\u66FF\u6362\u6A21\u5F0F\u9700\u8981\u586B\u5199\u6587\u672C\u3002");
-    const { changed, skipped } = await runNodeBatch(nodes, context, (node, index) => {
+    const { changed, skipped } = await runNodeBatch(nodes, context, (node) => {
       let nextName;
       if (mode === "replace") nextName = text;
       else if (mode === "suffix") nextName = `${node.name} ${text}`.slice(0, 80);
-      else nextName = `${text} ${index + 1}`.slice(0, 80);
+      else nextName = `${text} ${node.name}`.slice(0, 80);
       if (node.name === nextName) return false;
       node.name = nextName;
     });
@@ -1472,16 +1541,25 @@
     const options = batchSearchOptions(args, context);
     if (toolName === "batch_set_text") {
       action = "\u66F4\u65B0\u6587\u672C";
-      targets = await resolveSemanticTargets(args, "text", (node) => node.type === "TEXT", {
-        ...options,
-        limit: options.limit || MAX_TEXT_SCAN_NODES
-      });
-      if (args.replaceOnly) targets.targetKind = "text-replacement";
+      const textArgs = normalizeContainerTextArgs(args);
+      if (String(textArgs.containerTarget || "").trim() && !String(textArgs.target || textArgs.targetQuery || "").trim()) {
+        throw new ValidationError("\u6309\u5BB9\u5668\u66F4\u65B0\u6587\u672C\u65F6\u9700\u8981\u586B\u5199\u5BB9\u5668\u5185\u7684\u6587\u672C\u76EE\u6807\u3002");
+      }
+      targets = await resolveSemanticTargets(
+        textArgs,
+        textArgs.containerTarget ? "text-descendant" : "text",
+        (node) => node.type === "TEXT",
+        {
+          ...options,
+          limit: options.limit || MAX_TEXT_SCAN_NODES
+        }
+      );
+      if (textArgs.replaceOnly) targets.targetKind = "text-replacement";
     } else if (toolName === "batch_set_fill") {
       action = "\u66F4\u65B0\u586B\u5145\u8272";
       if (isTransparentHex(args.color)) return planBatchEdit("batch_remove_fill", args, context);
       parseHexColor(args.color);
-      const fillArgs = normalizeFillTargetArgs(args);
+      const fillArgs = normalizeContainerTextArgs(args, { includeText: true });
       const includeText = Boolean(fillArgs.includeText);
       targets = includeText ? await resolveSemanticTargets(
         fillArgs,
@@ -1602,23 +1680,15 @@
   function fontNamesEqual(left, right) {
     return left !== figma.mixed && (left == null ? void 0 : left.family) === right.family && (left == null ? void 0 : left.style) === right.style;
   }
-  function normalizeFillTargetArgs(args) {
+  function normalizeContainerTextArgs(args, { includeText = false } = {}) {
     const relation = splitContainerTextTarget(args.target || args.targetQuery || "");
     if (!relation) return args;
     return {
       ...args,
       target: relation.child,
       containerTarget: args.containerTarget || relation.container,
-      includeText: true
+      ...includeText ? { includeText: true } : {}
     };
-  }
-  function splitContainerTextTarget(value) {
-    const match = String(value || "").trim().match(/^(.+?)(?:的|\s+)?(标题|副标题|主标题|文案|文字|文本|title|subtitle)$/i);
-    if (!match) return null;
-    const container = String(match[1] || "").trim();
-    const child = String(match[2] || "").trim();
-    if (!container || !child) return null;
-    return { container, child };
   }
   function isTransparentHex(value) {
     return /^#?([0-9a-f]{6}00|[0-9a-f]{8})$/i.test(String(value || "").trim()) && String(value || "").trim().slice(-2).toLowerCase() === "00";

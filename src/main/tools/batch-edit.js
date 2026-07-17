@@ -1,4 +1,5 @@
 import { SafetyError, ValidationError, isCancelledError } from '../../shared/errors.js';
+import { splitContainerTextTarget } from '../../shared/container-text-phrase.js';
 import { errorMessage, finiteNumber, normalizeHex, parseHexColor } from '../utils.js';
 import { MAX_TEXT_SCAN_NODES, resolveTargets, summarizeNode } from '../selection.js';
 import { resolveSemanticTargets } from '../semantic-targets.js';
@@ -164,11 +165,11 @@ export async function batchRenameLayers(args, context) {
 
   if (!text) throw new ValidationError('前缀、后缀或替换模式需要填写文本。');
 
-  const { changed, skipped } = await runNodeBatch(nodes, context, (node, index) => {
+  const { changed, skipped } = await runNodeBatch(nodes, context, (node) => {
     let nextName;
     if (mode === 'replace') nextName = text;
     else if (mode === 'suffix') nextName = `${node.name} ${text}`.slice(0, 80);
-    else nextName = `${text} ${index + 1}`.slice(0, 80);
+    else nextName = `${text} ${node.name}`.slice(0, 80);
     if (node.name === nextName) return false;
     node.name = nextName;
   });
@@ -206,16 +207,28 @@ async function planBatchEdit(toolName, args, context) {
 
   if (toolName === 'batch_set_text') {
     action = '更新文本';
-    targets = await resolveSemanticTargets(args, 'text', (node) => node.type === 'TEXT', {
-      ...options,
-      limit: options.limit || MAX_TEXT_SCAN_NODES,
-    });
-    if (args.replaceOnly) targets.targetKind = 'text-replacement';
+    const textArgs = normalizeContainerTextArgs(args);
+    if (
+      String(textArgs.containerTarget || '').trim() &&
+      !String(textArgs.target || textArgs.targetQuery || '').trim()
+    ) {
+      throw new ValidationError('按容器更新文本时需要填写容器内的文本目标。');
+    }
+    targets = await resolveSemanticTargets(
+      textArgs,
+      textArgs.containerTarget ? 'text-descendant' : 'text',
+      (node) => node.type === 'TEXT',
+      {
+        ...options,
+        limit: options.limit || MAX_TEXT_SCAN_NODES,
+      },
+    );
+    if (textArgs.replaceOnly) targets.targetKind = 'text-replacement';
   } else if (toolName === 'batch_set_fill') {
     action = '更新填充色';
     if (isTransparentHex(args.color)) return planBatchEdit('batch_remove_fill', args, context);
     parseHexColor(args.color);
-    const fillArgs = normalizeFillTargetArgs(args);
+    const fillArgs = normalizeContainerTextArgs(args, { includeText: true });
     const includeText = Boolean(fillArgs.includeText);
     targets = includeText
       ? await resolveSemanticTargets(
@@ -356,27 +369,15 @@ function fontNamesEqual(left, right) {
   return left !== figma.mixed && left?.family === right.family && left?.style === right.style;
 }
 
-function normalizeFillTargetArgs(args) {
+function normalizeContainerTextArgs(args, { includeText = false } = {}) {
   const relation = splitContainerTextTarget(args.target || args.targetQuery || '');
   if (!relation) return args;
   return {
     ...args,
     target: relation.child,
     containerTarget: args.containerTarget || relation.container,
-    includeText: true,
+    ...(includeText ? { includeText: true } : {}),
   };
-}
-
-function splitContainerTextTarget(value) {
-  const match = String(value || '')
-    .trim()
-    .match(/^(.+?)(?:的|\s+)?(标题|副标题|主标题|文案|文字|文本|title|subtitle)$/i);
-  if (!match) return null;
-
-  const container = String(match[1] || '').trim();
-  const child = String(match[2] || '').trim();
-  if (!container || !child) return null;
-  return { container, child };
 }
 
 function isTransparentHex(value) {

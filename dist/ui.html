@@ -770,6 +770,10 @@ select {
           replaceOnly: {
             type: "boolean",
             description: "Set true to replace only occurrences of target inside each matched text layer."
+          },
+          containerTarget: {
+            type: "string",
+            description: "Optional container phrase when setting a text role inside a named container, such as dialog/modal/card."
           }
         },
         ["text"]
@@ -944,6 +948,7 @@ select {
     "Prefer inspect_canvas when you need context. It automatically inspects the current selection when one exists, otherwise the current page. Do not call inspect_canvas more than twice for one user request.",
     "For fill/background changes on controls or groups, use batch_set_fill with the original user target and keep includeText false unless the user explicitly asks to change text color. The tool will pick the most likely background layer inside each matched container.",
     'For text, title, subtitle, or copy color changes inside containers, use batch_set_fill with includeText true. When the request is like "dialog title color", pass target="title" and containerTarget="dialog".',
+    "For replacing all text in a named role inside a container, use batch_set_text with target set to the text role and containerTarget set to the original container phrase.",
     "When the user asks to remove, clear, delete, or unset background/fill color, use batch_remove_fill instead of setting a transparent color.",
     'When the user asks to copy, duplicate, or clone a layer/frame/artboard/module, use duplicate_layers. Preserve requested count, placement, and layout such as "2 copies", "bottom-left", or "vertical".',
     "For broad edits, make the smallest useful change and summarize exactly what changed.",
@@ -958,79 +963,6 @@ select {
     }
   }));
   var CONFIRM_TOOLS = new Set(TOOL_REGISTRY.filter(({ confirm }) => confirm).map(({ name }) => name));
-
-  // src/shared/command-protocol.js
-  var INTERNAL_PROPERTIES = {
-    nodeIds: { type: "array", items: { type: "string" }, minItems: 1 },
-    deepSearch: { type: "boolean" },
-    fallbackFont: {
-      type: "object",
-      properties: {
-        family: { type: "string" },
-        style: { type: "string" }
-      },
-      required: ["family", "style"],
-      additionalProperties: false
-    },
-    targetKind: { type: "string" },
-    targetQuery: { type: "string" }
-  };
-  function validateToolArguments(name, value, { allowInternal = false } = {}) {
-    const metadata = TOOL_REGISTRY_BY_NAME.get(name);
-    if (!metadata) throw new ValidationError(`\u4E0D\u652F\u6301\u7684\u5DE5\u5177\uFF1A${name}`);
-    if (!isPlainObject(value)) throw new ValidationError(`${name} \u53C2\u6570\u5FC5\u987B\u662F\u5BF9\u8C61\u3002`);
-    const schema = metadata.parameters;
-    const properties = allowInternal ? { ...schema.properties, ...INTERNAL_PROPERTIES } : schema.properties;
-    const allowed = new Set(Object.keys(properties));
-    for (const key of schema.required || []) {
-      if (value[key] === void 0) throw new ValidationError(`${name}.${key} \u662F\u5FC5\u586B\u53C2\u6570\u3002`);
-    }
-    for (const [key, item] of Object.entries(value)) {
-      if (!allowed.has(key)) throw new ValidationError(`${name} \u4E0D\u652F\u6301\u53C2\u6570\uFF1A${key}`);
-      assertSchemaValue(`${name}.${key}`, item, properties[key]);
-    }
-    return value;
-  }
-  function assertSchemaValue(path, value, schema) {
-    if (!schema) return;
-    if (schema.type === "number" && (typeof value !== "number" || !Number.isFinite(value))) {
-      throw new ValidationError(`${path} \u5FC5\u987B\u662F\u6709\u9650\u6570\u5B57\u3002`);
-    }
-    if (schema.type === "string" && typeof value !== "string") {
-      throw new ValidationError(`${path} \u5FC5\u987B\u662F\u5B57\u7B26\u4E32\u3002`);
-    }
-    if (schema.type === "boolean" && typeof value !== "boolean") {
-      throw new ValidationError(`${path} \u5FC5\u987B\u662F\u5E03\u5C14\u503C\u3002`);
-    }
-    if (schema.type === "array") {
-      if (!Array.isArray(value)) throw new ValidationError(`${path} \u5FC5\u987B\u662F\u6570\u7EC4\u3002`);
-      if (schema.minItems && value.length < schema.minItems) {
-        throw new ValidationError(`${path} \u81F3\u5C11\u9700\u8981 ${schema.minItems} \u9879\u3002`);
-      }
-      value.forEach((item, index) => assertSchemaValue(`${path}[${index}]`, item, schema.items));
-    }
-    if (schema.type === "object") {
-      if (!isPlainObject(value)) throw new ValidationError(`${path} \u5FC5\u987B\u662F\u5BF9\u8C61\u3002`);
-      const properties = schema.properties || {};
-      for (const key of schema.required || []) {
-        if (value[key] === void 0) throw new ValidationError(`${path}.${key} \u662F\u5FC5\u586B\u53C2\u6570\u3002`);
-      }
-      if (schema.additionalProperties === false) {
-        for (const key of Object.keys(value)) {
-          if (!(key in properties)) throw new ValidationError(`${path} \u4E0D\u652F\u6301\u53C2\u6570\uFF1A${key}`);
-        }
-      }
-      for (const [key, item] of Object.entries(value)) {
-        assertSchemaValue(`${path}.${key}`, item, properties[key]);
-      }
-    }
-    if (schema.enum && !schema.enum.includes(value)) {
-      throw new ValidationError(`${path} \u5FC5\u987B\u662F\u4EE5\u4E0B\u503C\u4E4B\u4E00\uFF1A${schema.enum.join(", ")}\u3002`);
-    }
-  }
-  function isPlainObject(value) {
-    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-  }
 
   // src/ui/model-client.js
   async function chatCompletion(settings, messages, options = {}) {
@@ -1055,6 +987,22 @@ select {
       throw new Error(`\u6A21\u578B\u8BF7\u6C42\u5931\u8D25\uFF08${response.status}\uFF09\uFF1A${text.slice(0, 240)}`);
     }
     return response.json();
+  }
+
+  // src/shared/container-text-phrase.js
+  var CONTAINER_TEXT_PATTERN = /^(.+?)(?:的|\s+)?(标题|副标题|主标题|文案|文字|文本|title|subtitle)$/i;
+  var SCOPE_ONLY_PATTERN = /^(?:所有|全部|当前|选中|所选)$/i;
+  function splitContainerTextTarget(value) {
+    const text = cleanTargetPhrase(value).replace(/(标题|副标题|主标题)(?:文案|文字|文本)$/i, "$1");
+    const match = text.match(CONTAINER_TEXT_PATTERN);
+    if (!match) return null;
+    const container = cleanTargetPhrase(match[1]);
+    const child = cleanTargetPhrase(match[2]);
+    if (!container || !child || SCOPE_ONLY_PATTERN.test(container)) return null;
+    return { container, child };
+  }
+  function cleanTargetPhrase(value) {
+    return String(value || "").trim().replace(/[“”‘’]/g, "").replace(/^["']+|["']+$/g, "").trim();
   }
 
   // src/shared/target-utils.js
@@ -1147,7 +1095,7 @@ select {
       from: "",
       to: ""
     };
-    return analyzeDuplicate(intent) || analyzeRemoveFill(intent) || analyzeSetFill(intent) || analyzeCornerRadius(intent) || analyzeOpacity(intent) || analyzeResize(intent) || analyzeVisibility(intent) || analyzeTextReplacement(intent) || intent;
+    return analyzeDuplicate(intent) || analyzeRemoveFill(intent) || analyzeSetFill(intent) || analyzeCornerRadius(intent) || analyzeOpacity(intent) || analyzeResize(intent) || analyzeVisibility(intent) || analyzeSetText(intent) || analyzeTextReplacement(intent) || analyzeRename(intent) || intent;
   }
   function planFromIntent(intent) {
     if (!intent || intent.kind === "unknown") return null;
@@ -1186,6 +1134,21 @@ select {
         text: intent.to,
         replaceOnly: true,
         scope: intent.scope
+      });
+    }
+    if (intent.kind === "set_text") {
+      return plan(intent, "batch_set_text", {
+        ...common,
+        text: intent.value,
+        replaceOnly: false,
+        ...intent.containerTarget ? { containerTarget: intent.containerTarget } : {}
+      });
+    }
+    if (intent.kind === "rename") {
+      return plan(intent, "batch_rename_layers", {
+        ...common,
+        mode: intent.mode,
+        text: intent.value
       });
     }
     if (intent.kind === "set_corner_radius") {
@@ -1283,17 +1246,100 @@ select {
       targetKind: hasControlIntent(target) ? "control" : base.targetKind
     };
   }
+  function analyzeSetText(base) {
+    var _a;
+    const patterns = [
+      /^(?:将|把)\s*(.+?)(?:的)?(?:文案|文字|文本|标题|副标题|主标题|标签文字)\s*(?:改成|改为|替换成|替换为|换成|设为|设置为|变成)\s*(.+?)\s*$/i,
+      /^(?:set|change)\s+(.+?)\s+(?:copy|text|label|title|subtitle)\s+(?:to\s+)?(.+?)\s*$/i
+    ];
+    const match = firstMatch(base.raw, patterns);
+    if (!match) return null;
+    const fullChineseTarget = (_a = base.raw.match(
+      /^(?:将|把)\s*(.+?)\s*(?:改成|改为|替换成|替换为|换成|设为|设置为|变成)/i
+    )) == null ? void 0 : _a[1];
+    const inferredRelation = splitContainerTextTarget(fullChineseTarget);
+    const relation = (inferredRelation && !hasControlIntent(inferredRelation.container) ? inferredRelation : null) || splitContainerTextTarget(match[1]);
+    const target = cleanPart((relation == null ? void 0 : relation.child) || match[1]);
+    const text = cleanPart(match[2]);
+    if (!target || !text || isColorValue(text)) return null;
+    return {
+      ...base,
+      kind: "set_text",
+      target,
+      containerTarget: (relation == null ? void 0 : relation.container) || "",
+      value: text,
+      scope: scopeFromText(`${base.raw} ${target}`)
+    };
+  }
+  function analyzeRename(base) {
+    const affixPatterns = [
+      {
+        pattern: /^(?:给|为|将|把)\s*(.+?)(?:的)?(?:图层)?(?:名称|名字|命名)?\s*(?:添加|加上|加)\s*(?:名称)?前缀\s*[“"']?(.+?)[”"']?\s*$/i,
+        mode: "prefix"
+      },
+      {
+        pattern: /^(?:给|为|将|把)\s*(.+?)(?:的)?(?:图层)?(?:名称|名字|命名)?\s*(?:添加|加上|加)\s*(?:名称)?后缀\s*[“"']?(.+?)[”"']?\s*$/i,
+        mode: "suffix"
+      },
+      {
+        pattern: /^(?:add|apply)\s+(?:the\s+)?prefix\s+["']?(.+?)["']?\s+to\s+(.+?)\s*$/i,
+        mode: "prefix",
+        valueIndex: 1,
+        targetIndex: 2
+      },
+      {
+        pattern: /^(?:add|apply)\s+(?:the\s+)?suffix\s+["']?(.+?)["']?\s+to\s+(.+?)\s*$/i,
+        mode: "suffix",
+        valueIndex: 1,
+        targetIndex: 2
+      }
+    ];
+    for (const { pattern, mode, targetIndex = 1, valueIndex = 2 } of affixPatterns) {
+      const match2 = base.raw.match(pattern);
+      if (!match2) continue;
+      const target2 = cleanLayerTarget(match2[targetIndex]);
+      const value2 = cleanPart(match2[valueIndex]);
+      if (!target2 || !value2) return null;
+      return {
+        ...base,
+        kind: "rename",
+        target: target2,
+        mode,
+        value: value2,
+        scope: scopeFromText(`${base.raw} ${target2}`)
+      };
+    }
+    const replacePatterns = [
+      /^(?:将|把)\s*(.+?)\s*(?:重命名为|改名为|命名为)\s*(.+?)\s*$/i,
+      /^(?:将|把)\s*(.+?)(?:的)?(?:图层)?(?:名称|名字|命名)\s*(?:改成|改为|替换成|替换为|设为|设置为)\s*(.+?)\s*$/i,
+      /^rename\s+(.+?)\s+(?:to|as)\s+(.+?)\s*$/i
+    ];
+    const match = firstMatch(base.raw, replacePatterns);
+    if (!match) return null;
+    const target = cleanLayerTarget(match[1]);
+    const value = cleanPart(match[2]);
+    if (!target || !value) return null;
+    return {
+      ...base,
+      kind: "rename",
+      target,
+      mode: "replace",
+      value,
+      scope: scopeFromText(`${base.raw} ${target}`)
+    };
+  }
   function analyzeTextReplacement(base) {
     const patterns = [
       /^(?:将|把)\s*(.+?)\s*(?:改成|改为|替换成|替换为|换成|变成)\s*(.+?)\s*$/,
       /^change\s+(.+?)\s+to\s+(.+?)\s*$/i,
-      /^replace\s+(.+?)\s+with\s+(.+?)\s*$/i
+      /^replace\s+(.+?)\s+with\s+(.+?)\s*$/i,
+      /^rename\s+(.+?)\s+(?:to|as)\s+(.+?)\s*$/i
     ];
     const match = firstMatch(base.raw, patterns);
     if (!match) return null;
     const from = cleanPart(match[1]);
     const to = cleanPart(match[2]);
-    if (!from || !to || isColorValue(to) || hasDesignPropertyIntent(from) || hasControlIntent(from) || hasTextRoleIntent(from)) {
+    if (!from || !to || isColorValue(to) || hasDesignPropertyIntent(from) || hasDesignPropertyIntent(to) || hasControlIntent(from) || hasTextRoleIntent(from) || hasLayerTargetIntent(from)) {
       return null;
     }
     return {
@@ -1304,9 +1350,11 @@ select {
     };
   }
   function analyzeCornerRadius(base) {
-    const match = base.raw.match(
-      /^(?:将|把)\s*(.+?)\s*(?:的)?(?:圆角|radius|corner radius)\s*(?:改成|改为|设为|设置为|变成)\s*(\d+(?:\.\d+)?)\s*(?:px|像素)?\s*$/i
-    );
+    const match = firstMatch(base.raw, [
+      /^(?:将|把)\s*(.+?)\s*(?:的)?(?:圆角|radius|corner radius)\s*(?:改成|改为|设为|设置为|变成)\s*(\d+(?:\.\d+)?)\s*(?:px|像素)?\s*$/i,
+      /^(?:set|change)\s+(.+?)\s+(?:corner radius|radius)\s+(?:to\s+)?(\d+(?:\.\d+)?)\s*(?:px)?\s*$/i,
+      /^round\s+(.+?)\s+(?:to\s+)?(\d+(?:\.\d+)?)\s*(?:px)?\s*$/i
+    ]);
     if (!match) return null;
     const target = cleanPart(match[1]);
     const radius = Number(match[2]);
@@ -1347,6 +1395,14 @@ select {
       {
         pattern: /^(?:将|把)\s*(.+?)\s*(?:的)?高度\s*(?:改成|改为|设为|设置为|变成)\s*(\d+(?:\.\d+)?)\s*(?:px|像素)?\s*$/i,
         dimension: "height"
+      },
+      {
+        pattern: /^(?:set|change)\s+(.+?)\s+width\s+(?:to\s+)?(\d+(?:\.\d+)?)\s*(?:px)?\s*$/i,
+        dimension: "width"
+      },
+      {
+        pattern: /^(?:set|change)\s+(.+?)\s+height\s+(?:to\s+)?(\d+(?:\.\d+)?)\s*(?:px)?\s*$/i,
+        dimension: "height"
       }
     ];
     for (const { pattern, dimension } of dimensionPatterns) {
@@ -1363,9 +1419,10 @@ select {
         scope: scopeFromText(`${base.raw} ${target2}`)
       };
     }
-    const sizeMatch = base.raw.match(
-      /^(?:将|把)\s*(.+?)\s*(?:的)?(?:尺寸|大小)\s*(?:改成|改为|设为|设置为|变成)\s*(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(?:px|像素)?\s*$/i
-    );
+    const sizeMatch = firstMatch(base.raw, [
+      /^(?:将|把)\s*(.+?)\s*(?:的)?(?:尺寸|大小)\s*(?:改成|改为|设为|设置为|变成)\s*(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(?:px|像素)?\s*$/i,
+      /^resize\s+(.+?)\s+to\s+(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(?:px)?\s*$/i
+    ]);
     if (!sizeMatch) return null;
     const target = cleanPart(sizeMatch[1]);
     const width = Number(sizeMatch[2]);
@@ -1415,14 +1472,8 @@ select {
       ""
     ).replace(/\s*(?:排列|横向|纵向|竖向|水平|垂直).*/i, "").trim();
   }
-  function splitContainerTextTarget(value) {
-    const text = cleanPart(value);
-    const match = text.match(/^(.+?)(?:的|\s+)?(标题|副标题|主标题|文案|文字|文本|title|subtitle)$/i);
-    if (!match) return null;
-    const container = cleanPart(match[1]);
-    const child = cleanPart(match[2]);
-    if (!container || !child || /^(?:所有|全部|当前|选中|所选)$/i.test(container)) return null;
-    return { container, child };
+  function cleanLayerTarget(value) {
+    return cleanPart(value).replace(/(?:的)?(?:图层)?(?:名称|名字|命名)$/i, "").trim();
   }
   function hasTextColorIntent(raw, target) {
     return /文字颜色|文本颜色|字体颜色|文字色|文本色|色值|颜色/i.test(String(raw || "")) && /标题|副标题|主标题|文案|文字|文本|title|subtitle/i.test(String(target || raw || ""));
@@ -1482,8 +1533,13 @@ select {
   function hasTextRoleIntent(value) {
     return /\b(title|subtitle|copy|label|text)\b|标题|副标题|主标题|文案|文字|文本/i.test(String(value || ""));
   }
+  function hasLayerTargetIntent(value) {
+    return /\b(layer|layers|frame|frames|group|groups|component|components|instance|instances|section|sections|icon|icons)\b|图层|画板|框架|分组|组件|实例|区块|图标/i.test(
+      String(value || "")
+    );
+  }
   function hasDesignPropertyIntent(value) {
-    return /\b(width|height|size|opacity|radius|color|background|fill|border|stroke|layout|spacing|padding|margin|visible|visibility)\b|宽度|高度|尺寸|大小|透明度|不透明度|圆角|颜色|色值|背景|底色|填充|边框|描边|布局|间距|内边距|外边距|可见|隐藏/i.test(
+    return /\b(width|height|size|opacity|radius|color|background|fill|border|stroke|layout|spacing|padding|margin|visible|visibility|font|typeface|weight|line height|letter spacing|shadow|gradient|blur)\b|宽度|高度|尺寸|大小|透明度|不透明度|圆角|颜色|色值|背景|底色|填充|边框|描边|布局|间距|内边距|外边距|可见|隐藏|字号|字体|字重|行高|字间距|阴影|渐变|模糊/i.test(
       String(value || "")
     );
   }
@@ -1491,8 +1547,122 @@ select {
     return /^#[0-9a-f]{3,8}$/i.test(String(value || "").trim());
   }
 
+  // src/shared/command-protocol.js
+  var INTERNAL_PROPERTIES = {
+    nodeIds: { type: "array", items: { type: "string" }, minItems: 1 },
+    deepSearch: { type: "boolean" },
+    fallbackFont: {
+      type: "object",
+      properties: {
+        family: { type: "string" },
+        style: { type: "string" }
+      },
+      required: ["family", "style"],
+      additionalProperties: false
+    },
+    targetKind: { type: "string" },
+    targetQuery: { type: "string" }
+  };
+  function validateToolArguments(name, value, { allowInternal = false } = {}) {
+    const metadata = TOOL_REGISTRY_BY_NAME.get(name);
+    if (!metadata) throw new ValidationError(`\u4E0D\u652F\u6301\u7684\u5DE5\u5177\uFF1A${name}`);
+    if (!isPlainObject(value)) throw new ValidationError(`${name} \u53C2\u6570\u5FC5\u987B\u662F\u5BF9\u8C61\u3002`);
+    const schema = metadata.parameters;
+    const properties = allowInternal ? { ...schema.properties, ...INTERNAL_PROPERTIES } : schema.properties;
+    const allowed = new Set(Object.keys(properties));
+    for (const key of schema.required || []) {
+      if (value[key] === void 0) throw new ValidationError(`${name}.${key} \u662F\u5FC5\u586B\u53C2\u6570\u3002`);
+    }
+    for (const [key, item] of Object.entries(value)) {
+      if (!allowed.has(key)) throw new ValidationError(`${name} \u4E0D\u652F\u6301\u53C2\u6570\uFF1A${key}`);
+      assertSchemaValue(`${name}.${key}`, item, properties[key]);
+    }
+    return value;
+  }
+  function assertSchemaValue(path, value, schema) {
+    if (!schema) return;
+    if (schema.type === "number" && (typeof value !== "number" || !Number.isFinite(value))) {
+      throw new ValidationError(`${path} \u5FC5\u987B\u662F\u6709\u9650\u6570\u5B57\u3002`);
+    }
+    if (schema.type === "string" && typeof value !== "string") {
+      throw new ValidationError(`${path} \u5FC5\u987B\u662F\u5B57\u7B26\u4E32\u3002`);
+    }
+    if (schema.type === "boolean" && typeof value !== "boolean") {
+      throw new ValidationError(`${path} \u5FC5\u987B\u662F\u5E03\u5C14\u503C\u3002`);
+    }
+    if (schema.type === "array") {
+      if (!Array.isArray(value)) throw new ValidationError(`${path} \u5FC5\u987B\u662F\u6570\u7EC4\u3002`);
+      if (schema.minItems && value.length < schema.minItems) {
+        throw new ValidationError(`${path} \u81F3\u5C11\u9700\u8981 ${schema.minItems} \u9879\u3002`);
+      }
+      value.forEach((item, index) => assertSchemaValue(`${path}[${index}]`, item, schema.items));
+    }
+    if (schema.type === "object") {
+      if (!isPlainObject(value)) throw new ValidationError(`${path} \u5FC5\u987B\u662F\u5BF9\u8C61\u3002`);
+      const properties = schema.properties || {};
+      for (const key of schema.required || []) {
+        if (value[key] === void 0) throw new ValidationError(`${path}.${key} \u662F\u5FC5\u586B\u53C2\u6570\u3002`);
+      }
+      if (schema.additionalProperties === false) {
+        for (const key of Object.keys(value)) {
+          if (!(key in properties)) throw new ValidationError(`${path} \u4E0D\u652F\u6301\u53C2\u6570\uFF1A${key}`);
+        }
+      }
+      for (const [key, item] of Object.entries(value)) {
+        assertSchemaValue(`${path}.${key}`, item, properties[key]);
+      }
+    }
+    if (schema.enum && !schema.enum.includes(value)) {
+      throw new ValidationError(`${path} \u5FC5\u987B\u662F\u4EE5\u4E0B\u503C\u4E4B\u4E00\uFF1A${schema.enum.join(", ")}\u3002`);
+    }
+  }
+  function isPlainObject(value) {
+    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  }
+
+  // src/ui/tool-prepare.js
+  function prepareToolCall(toolName, rawArgs, { userPrompt = "", userContext = userPrompt, source = "model" } = {}) {
+    const args = { ...rawArgs };
+    if (source === "model") {
+      validateToolArguments(toolName, args);
+      enrichArgsFromPrompt(toolName, args, userPrompt);
+    } else if (source !== "rule") {
+      throw new Error(`\u4E0D\u652F\u6301\u7684\u5DE5\u5177\u8C03\u7528\u6765\u6E90\uFF1A${source}`);
+    }
+    validateToolArguments(toolName, args, { allowInternal: true });
+    const reason = validateTargetFromPrompt(toolName, args, userContext);
+    return reason ? { toolName, args, skipped: true, reason } : { toolName, args, skipped: false, reason: "" };
+  }
+  function validateTargetFromPrompt(name, args, userContext) {
+    if (!CONFIRM_TOOLS.has(name)) return "";
+    const prompt = normalizeTarget(userContext);
+    const fields = [
+      ["\u76EE\u6807", args.target],
+      ["\u5BB9\u5668\u76EE\u6807", args.containerTarget]
+    ];
+    for (const [label, value] of fields) {
+      if (!value) continue;
+      const target = normalizeTarget(value);
+      if (!target || prompt.includes(target) || targetTokensAllowed(prompt, target)) continue;
+      return `${label}\u201C${value}\u201D\u6CA1\u6709\u51FA\u73B0\u5728\u7528\u6237\u8BF7\u6C42\u4E2D\uFF0C\u8BF7\u5148\u6F84\u6E05\uFF0C\u4E0D\u8981\u731C\u6D4B\u5176\u4ED6\u76EE\u6807\u3002`;
+    }
+    return "";
+  }
+  function targetTokensAllowed(prompt, target) {
+    const parts = target.split(/\s+/).filter(Boolean);
+    if (!parts.length) return true;
+    return parts.every((part) => prompt.includes(part));
+  }
+
   // src/ui/tool-loop.js
-  async function runToolLoop({ settings, messages, bridge: bridge2, appendMessage: appendMessage2, signal }) {
+  async function runToolLoop({
+    settings,
+    messages,
+    bridge: bridge2,
+    appendMessage: appendMessage2,
+    signal,
+    confirm = confirmTool
+  }) {
     var _a, _b, _c, _d, _e;
     let current = [...messages];
     let finalText = "";
@@ -1502,9 +1672,14 @@ select {
     const plan2 = createEditPlan(userPrompt);
     throwIfAborted(signal);
     if (plan2) {
-      validateToolArguments(plan2.toolName, plan2.args, { allowInternal: true });
-      const runner = CONFIRM_TOOLS.has(plan2.toolName) ? runConfirmedTool : runSimpleTool;
-      const result = await runner(plan2.toolName, { ...plan2.args }, bridge2, appendMessage2, signal);
+      const prepared = prepareToolCall(plan2.toolName, plan2.args, {
+        userPrompt,
+        userContext,
+        source: "rule"
+      });
+      if (prepared.skipped) return prepared.reason;
+      const runner = CONFIRM_TOOLS.has(prepared.toolName) ? runConfirmedTool : runSimpleTool;
+      const result = await runner(prepared.toolName, prepared.args, bridge2, appendMessage2, signal, confirm);
       return result.skipped ? result.reason : result.message || "\u7F16\u8F91\u5DF2\u5B8C\u6210\u3002";
     }
     for (let turn = 0; turn < 8; turn++) {
@@ -1523,19 +1698,21 @@ select {
         if (!TOOLS.some((item) => item.function.name === name)) {
           throw new Error(`\u6A21\u578B\u8C03\u7528\u4E86\u4E0D\u652F\u6301\u7684\u5DE5\u5177\uFF1A${name}`);
         }
-        validateToolArguments(name, args);
-        enrichArgsFromPrompt(name, args, userPrompt);
-        const targetError = validateTargetFromPrompt(name, args, userContext);
-        if (targetError) {
+        const prepared = prepareToolCall(name, args, {
+          userPrompt,
+          userContext,
+          source: "model"
+        });
+        if (prepared.skipped) {
           current.push({
             role: "tool",
             tool_call_id: toolCall.id,
-            content: JSON.stringify({ skipped: true, reason: targetError })
+            content: JSON.stringify({ skipped: true, reason: prepared.reason })
           });
-          appendMessage2("tool", `\u5DF2\u8DF3\u8FC7 ${name}\uFF1A${targetError}`);
+          appendMessage2("tool", `\u5DF2\u8DF3\u8FC7 ${name}\uFF1A${prepared.reason}`);
           continue;
         }
-        if (name === "inspect_canvas") {
+        if (prepared.toolName === "inspect_canvas") {
           inspectCount++;
           if (inspectCount > 2) {
             current.push({
@@ -1547,7 +1724,7 @@ select {
           }
         }
         throwIfAborted(signal);
-        const result = CONFIRM_TOOLS.has(name) ? await runConfirmedTool(name, args, bridge2, appendMessage2, signal) : await runSimpleTool(name, args, bridge2, appendMessage2, signal);
+        const result = CONFIRM_TOOLS.has(prepared.toolName) ? await runConfirmedTool(prepared.toolName, prepared.args, bridge2, appendMessage2, signal, confirm) : await runSimpleTool(prepared.toolName, prepared.args, bridge2, appendMessage2, signal);
         current.push({
           role: "tool",
           tool_call_id: toolCall.id,
@@ -1558,13 +1735,13 @@ select {
     if (!finalText) finalText = "\u5DF2\u5B8C\u6210\u8BF7\u6C42\u7684\u5DE5\u5177\u64CD\u4F5C\u3002";
     return finalText;
   }
-  async function runConfirmedTool(name, args, bridge2, appendMessage2, signal) {
+  async function runConfirmedTool(name, args, bridge2, appendMessage2, signal, confirm = confirmTool) {
     throwIfAborted(signal);
     appendMessage2("tool", `\u6B63\u5728\u9884\u89C8 ${name} ${JSON.stringify(args)}`);
     const preview = await previewConfirmedTool(name, args, bridge2, signal);
     throwIfAborted(signal);
     appendMessage2("tool", preview.message || `\u6B63\u5728\u9884\u89C8 ${name}\u3002`);
-    const approvedPreview = await confirmTool(name, args, preview, bridge2, appendMessage2, signal);
+    const approvedPreview = await confirm(name, args, preview, bridge2, appendMessage2, signal);
     if (!approvedPreview) {
       return { skipped: true, reason: "\u7528\u6237\u5728\u9884\u89C8\u540E\u53D6\u6D88\u4E86\u672C\u6B21\u64CD\u4F5C\u3002" };
     }
@@ -1730,18 +1907,6 @@ select {
   }
   function recentUserContext(messages) {
     return messages.filter((message) => message.role === "user").slice(-3).map((message) => message.content).join("\n");
-  }
-  function validateTargetFromPrompt(name, args, userContext) {
-    if (!CONFIRM_TOOLS.has(name) || !args.target) return "";
-    const prompt = normalizeTarget(userContext);
-    const target = normalizeTarget(args.target);
-    if (!target || prompt.includes(target) || targetTokensAllowed(prompt, target)) return "";
-    return `\u76EE\u6807\u201C${args.target}\u201D\u6CA1\u6709\u51FA\u73B0\u5728\u7528\u6237\u8BF7\u6C42\u4E2D\uFF0C\u8BF7\u5148\u6F84\u6E05\uFF0C\u4E0D\u8981\u731C\u6D4B\u5176\u4ED6\u76EE\u6807\u3002`;
-  }
-  function targetTokensAllowed(prompt, target) {
-    const parts = target.split(/\s+/).filter(Boolean);
-    if (!parts.length) return true;
-    return parts.every((part) => prompt.includes(part));
   }
   function throwIfAborted(signal) {
     if (!(signal == null ? void 0 : signal.aborted)) return;

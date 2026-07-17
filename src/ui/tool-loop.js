@@ -1,10 +1,17 @@
-import { validateToolArguments } from '../shared/command-protocol.js';
 import { ValidationError } from '../shared/errors.js';
 import { chatCompletion } from './model-client.js';
-import { createEditPlan, enrichArgsFromPrompt, normalizeTarget } from './edit-plan.js';
+import { createEditPlan } from './edit-plan.js';
+import { prepareToolCall } from './tool-prepare.js';
 import { CONFIRM_TOOLS, TOOLS } from './tools.js';
 
-export async function runToolLoop({ settings, messages, bridge, appendMessage, signal }) {
+export async function runToolLoop({
+  settings,
+  messages,
+  bridge,
+  appendMessage,
+  signal,
+  confirm = confirmTool,
+}) {
   let current = [...messages];
   let finalText = '';
   let inspectCount = 0;
@@ -15,9 +22,15 @@ export async function runToolLoop({ settings, messages, bridge, appendMessage, s
   throwIfAborted(signal);
 
   if (plan) {
-    validateToolArguments(plan.toolName, plan.args, { allowInternal: true });
-    const runner = CONFIRM_TOOLS.has(plan.toolName) ? runConfirmedTool : runSimpleTool;
-    const result = await runner(plan.toolName, { ...plan.args }, bridge, appendMessage, signal);
+    const prepared = prepareToolCall(plan.toolName, plan.args, {
+      userPrompt,
+      userContext,
+      source: 'rule',
+    });
+    if (prepared.skipped) return prepared.reason;
+
+    const runner = CONFIRM_TOOLS.has(prepared.toolName) ? runConfirmedTool : runSimpleTool;
+    const result = await runner(prepared.toolName, prepared.args, bridge, appendMessage, signal, confirm);
     return result.skipped ? result.reason : result.message || '编辑已完成。';
   }
 
@@ -40,22 +53,22 @@ export async function runToolLoop({ settings, messages, bridge, appendMessage, s
       if (!TOOLS.some((item) => item.function.name === name)) {
         throw new Error(`模型调用了不支持的工具：${name}`);
       }
-      validateToolArguments(name, args);
-
-      enrichArgsFromPrompt(name, args, userPrompt);
-
-      const targetError = validateTargetFromPrompt(name, args, userContext);
-      if (targetError) {
+      const prepared = prepareToolCall(name, args, {
+        userPrompt,
+        userContext,
+        source: 'model',
+      });
+      if (prepared.skipped) {
         current.push({
           role: 'tool',
           tool_call_id: toolCall.id,
-          content: JSON.stringify({ skipped: true, reason: targetError }),
+          content: JSON.stringify({ skipped: true, reason: prepared.reason }),
         });
-        appendMessage('tool', `已跳过 ${name}：${targetError}`);
+        appendMessage('tool', `已跳过 ${name}：${prepared.reason}`);
         continue;
       }
 
-      if (name === 'inspect_canvas') {
+      if (prepared.toolName === 'inspect_canvas') {
         inspectCount++;
         if (inspectCount > 2) {
           current.push({
@@ -68,9 +81,9 @@ export async function runToolLoop({ settings, messages, bridge, appendMessage, s
       }
 
       throwIfAborted(signal);
-      const result = CONFIRM_TOOLS.has(name)
-        ? await runConfirmedTool(name, args, bridge, appendMessage, signal)
-        : await runSimpleTool(name, args, bridge, appendMessage, signal);
+      const result = CONFIRM_TOOLS.has(prepared.toolName)
+        ? await runConfirmedTool(prepared.toolName, prepared.args, bridge, appendMessage, signal, confirm)
+        : await runSimpleTool(prepared.toolName, prepared.args, bridge, appendMessage, signal);
       current.push({
         role: 'tool',
         tool_call_id: toolCall.id,
@@ -83,14 +96,14 @@ export async function runToolLoop({ settings, messages, bridge, appendMessage, s
   return finalText;
 }
 
-async function runConfirmedTool(name, args, bridge, appendMessage, signal) {
+async function runConfirmedTool(name, args, bridge, appendMessage, signal, confirm = confirmTool) {
   throwIfAborted(signal);
   appendMessage('tool', `正在预览 ${name} ${JSON.stringify(args)}`);
   const preview = await previewConfirmedTool(name, args, bridge, signal);
   throwIfAborted(signal);
   appendMessage('tool', preview.message || `正在预览 ${name}。`);
 
-  const approvedPreview = await confirmTool(name, args, preview, bridge, appendMessage, signal);
+  const approvedPreview = await confirm(name, args, preview, bridge, appendMessage, signal);
   if (!approvedPreview) {
     return { skipped: true, reason: '用户在预览后取消了本次操作。' };
   }
@@ -287,22 +300,6 @@ function recentUserContext(messages) {
     .slice(-3)
     .map((message) => message.content)
     .join('\n');
-}
-
-function validateTargetFromPrompt(name, args, userContext) {
-  if (!CONFIRM_TOOLS.has(name) || !args.target) return '';
-
-  const prompt = normalizeTarget(userContext);
-  const target = normalizeTarget(args.target);
-  if (!target || prompt.includes(target) || targetTokensAllowed(prompt, target)) return '';
-
-  return `目标“${args.target}”没有出现在用户请求中，请先澄清，不要猜测其他目标。`;
-}
-
-function targetTokensAllowed(prompt, target) {
-  const parts = target.split(/\s+/).filter(Boolean);
-  if (!parts.length) return true;
-  return parts.every((part) => prompt.includes(part));
 }
 
 function throwIfAborted(signal) {

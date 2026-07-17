@@ -62,6 +62,8 @@ FigmaBatchAI/
     architecture.md      # 架构、安全模型和扩展指南
     product-engineering-handbook.md
                          # 产品定位、匹配规则和工程守则
+    acceptance-checklist.md
+                         # 自然语言评测与真实 Figma 验收清单
   scripts/
     build.mjs            # esbuild 双入口构建与 UI 内联
     check.mjs            # 校验生成的插件文件
@@ -75,6 +77,7 @@ FigmaBatchAI/
 ```sh
 npm run dev          # 监听源码并重建 dist
 npm test             # 运行 Vitest
+npm run test:eval    # 运行自然语言 Edit Plan 评测集
 npm run lint         # 运行 ESLint
 npm run format:check # 检查 Prettier 格式
 npm run verify       # 完整质量门禁

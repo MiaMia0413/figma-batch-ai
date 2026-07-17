@@ -1,3 +1,4 @@
+import { assertAllowedEndpoint } from '../shared/allowed-endpoints.js';
 import { ValidationError } from '../shared/errors.js';
 
 export const STORAGE_KEY = 'figma-batch-ai-settings-v1';
@@ -15,9 +16,7 @@ export async function getSettings() {
 export async function saveSettings(args) {
   const next = normalizeSettings(args);
 
-  if (!next.endpoint || !/^https:\/\//i.test(next.endpoint)) {
-    throw new ValidationError('Endpoint 必须以 https:// 开头。');
-  }
+  assertAllowedEndpoint(next.endpoint);
   if (!next.model) throw new ValidationError('请填写模型名称。');
 
   await figma.clientStorage.setAsync(STORAGE_KEY, next);

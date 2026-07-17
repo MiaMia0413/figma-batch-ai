@@ -1,3 +1,4 @@
+import { splitContainerTextTarget } from '../shared/container-text-phrase.js';
 import { hasControlTargetIntent, normalizeTargetQuery } from '../shared/target-utils.js';
 
 export function createEditPlan(prompt) {
@@ -45,7 +46,9 @@ function analyzeIntent(prompt) {
     analyzeOpacity(intent) ||
     analyzeResize(intent) ||
     analyzeVisibility(intent) ||
+    analyzeSetText(intent) ||
     analyzeTextReplacement(intent) ||
+    analyzeRename(intent) ||
     intent
   );
 }
@@ -93,6 +96,23 @@ function planFromIntent(intent) {
       text: intent.to,
       replaceOnly: true,
       scope: intent.scope,
+    });
+  }
+
+  if (intent.kind === 'set_text') {
+    return plan(intent, 'batch_set_text', {
+      ...common,
+      text: intent.value,
+      replaceOnly: false,
+      ...(intent.containerTarget ? { containerTarget: intent.containerTarget } : {}),
+    });
+  }
+
+  if (intent.kind === 'rename') {
+    return plan(intent, 'batch_rename_layers', {
+      ...common,
+      mode: intent.mode,
+      text: intent.value,
     });
   }
 
@@ -207,11 +227,105 @@ function analyzeRemoveFill(base) {
   };
 }
 
+function analyzeSetText(base) {
+  const patterns = [
+    /^(?:将|把)\s*(.+?)(?:的)?(?:文案|文字|文本|标题|副标题|主标题|标签文字)\s*(?:改成|改为|替换成|替换为|换成|设为|设置为|变成)\s*(.+?)\s*$/i,
+    /^(?:set|change)\s+(.+?)\s+(?:copy|text|label|title|subtitle)\s+(?:to\s+)?(.+?)\s*$/i,
+  ];
+  const match = firstMatch(base.raw, patterns);
+  if (!match) return null;
+
+  const fullChineseTarget = base.raw.match(
+    /^(?:将|把)\s*(.+?)\s*(?:改成|改为|替换成|替换为|换成|设为|设置为|变成)/i,
+  )?.[1];
+  const inferredRelation = splitContainerTextTarget(fullChineseTarget);
+  const relation =
+    (inferredRelation && !hasControlIntent(inferredRelation.container) ? inferredRelation : null) ||
+    splitContainerTextTarget(match[1]);
+  const target = cleanPart(relation?.child || match[1]);
+  const text = cleanPart(match[2]);
+  if (!target || !text || isColorValue(text)) return null;
+
+  return {
+    ...base,
+    kind: 'set_text',
+    target,
+    containerTarget: relation?.container || '',
+    value: text,
+    scope: scopeFromText(`${base.raw} ${target}`),
+  };
+}
+
+function analyzeRename(base) {
+  const affixPatterns = [
+    {
+      pattern:
+        /^(?:给|为|将|把)\s*(.+?)(?:的)?(?:图层)?(?:名称|名字|命名)?\s*(?:添加|加上|加)\s*(?:名称)?前缀\s*[“"']?(.+?)[”"']?\s*$/i,
+      mode: 'prefix',
+    },
+    {
+      pattern:
+        /^(?:给|为|将|把)\s*(.+?)(?:的)?(?:图层)?(?:名称|名字|命名)?\s*(?:添加|加上|加)\s*(?:名称)?后缀\s*[“"']?(.+?)[”"']?\s*$/i,
+      mode: 'suffix',
+    },
+    {
+      pattern: /^(?:add|apply)\s+(?:the\s+)?prefix\s+["']?(.+?)["']?\s+to\s+(.+?)\s*$/i,
+      mode: 'prefix',
+      valueIndex: 1,
+      targetIndex: 2,
+    },
+    {
+      pattern: /^(?:add|apply)\s+(?:the\s+)?suffix\s+["']?(.+?)["']?\s+to\s+(.+?)\s*$/i,
+      mode: 'suffix',
+      valueIndex: 1,
+      targetIndex: 2,
+    },
+  ];
+
+  for (const { pattern, mode, targetIndex = 1, valueIndex = 2 } of affixPatterns) {
+    const match = base.raw.match(pattern);
+    if (!match) continue;
+    const target = cleanLayerTarget(match[targetIndex]);
+    const value = cleanPart(match[valueIndex]);
+    if (!target || !value) return null;
+    return {
+      ...base,
+      kind: 'rename',
+      target,
+      mode,
+      value,
+      scope: scopeFromText(`${base.raw} ${target}`),
+    };
+  }
+
+  const replacePatterns = [
+    /^(?:将|把)\s*(.+?)\s*(?:重命名为|改名为|命名为)\s*(.+?)\s*$/i,
+    /^(?:将|把)\s*(.+?)(?:的)?(?:图层)?(?:名称|名字|命名)\s*(?:改成|改为|替换成|替换为|设为|设置为)\s*(.+?)\s*$/i,
+    /^rename\s+(.+?)\s+(?:to|as)\s+(.+?)\s*$/i,
+  ];
+  const match = firstMatch(base.raw, replacePatterns);
+  if (!match) return null;
+
+  const target = cleanLayerTarget(match[1]);
+  const value = cleanPart(match[2]);
+  if (!target || !value) return null;
+
+  return {
+    ...base,
+    kind: 'rename',
+    target,
+    mode: 'replace',
+    value,
+    scope: scopeFromText(`${base.raw} ${target}`),
+  };
+}
+
 function analyzeTextReplacement(base) {
   const patterns = [
     /^(?:将|把)\s*(.+?)\s*(?:改成|改为|替换成|替换为|换成|变成)\s*(.+?)\s*$/,
     /^change\s+(.+?)\s+to\s+(.+?)\s*$/i,
     /^replace\s+(.+?)\s+with\s+(.+?)\s*$/i,
+    /^rename\s+(.+?)\s+(?:to|as)\s+(.+?)\s*$/i,
   ];
   const match = firstMatch(base.raw, patterns);
   if (!match) return null;
@@ -223,8 +337,10 @@ function analyzeTextReplacement(base) {
     !to ||
     isColorValue(to) ||
     hasDesignPropertyIntent(from) ||
+    hasDesignPropertyIntent(to) ||
     hasControlIntent(from) ||
-    hasTextRoleIntent(from)
+    hasTextRoleIntent(from) ||
+    hasLayerTargetIntent(from)
   ) {
     return null;
   }
@@ -238,9 +354,11 @@ function analyzeTextReplacement(base) {
 }
 
 function analyzeCornerRadius(base) {
-  const match = base.raw.match(
+  const match = firstMatch(base.raw, [
     /^(?:将|把)\s*(.+?)\s*(?:的)?(?:圆角|radius|corner radius)\s*(?:改成|改为|设为|设置为|变成)\s*(\d+(?:\.\d+)?)\s*(?:px|像素)?\s*$/i,
-  );
+    /^(?:set|change)\s+(.+?)\s+(?:corner radius|radius)\s+(?:to\s+)?(\d+(?:\.\d+)?)\s*(?:px)?\s*$/i,
+    /^round\s+(.+?)\s+(?:to\s+)?(\d+(?:\.\d+)?)\s*(?:px)?\s*$/i,
+  ]);
   if (!match) return null;
 
   const target = cleanPart(match[1]);
@@ -290,6 +408,14 @@ function analyzeResize(base) {
         /^(?:将|把)\s*(.+?)\s*(?:的)?高度\s*(?:改成|改为|设为|设置为|变成)\s*(\d+(?:\.\d+)?)\s*(?:px|像素)?\s*$/i,
       dimension: 'height',
     },
+    {
+      pattern: /^(?:set|change)\s+(.+?)\s+width\s+(?:to\s+)?(\d+(?:\.\d+)?)\s*(?:px)?\s*$/i,
+      dimension: 'width',
+    },
+    {
+      pattern: /^(?:set|change)\s+(.+?)\s+height\s+(?:to\s+)?(\d+(?:\.\d+)?)\s*(?:px)?\s*$/i,
+      dimension: 'height',
+    },
   ];
 
   for (const { pattern, dimension } of dimensionPatterns) {
@@ -307,9 +433,10 @@ function analyzeResize(base) {
     };
   }
 
-  const sizeMatch = base.raw.match(
+  const sizeMatch = firstMatch(base.raw, [
     /^(?:将|把)\s*(.+?)\s*(?:的)?(?:尺寸|大小)\s*(?:改成|改为|设为|设置为|变成)\s*(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(?:px|像素)?\s*$/i,
-  );
+    /^resize\s+(.+?)\s+to\s+(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(?:px)?\s*$/i,
+  ]);
   if (!sizeMatch) return null;
 
   const target = cleanPart(sizeMatch[1]);
@@ -378,15 +505,10 @@ function cleanDuplicateTarget(value) {
     .trim();
 }
 
-function splitContainerTextTarget(value) {
-  const text = cleanPart(value);
-  const match = text.match(/^(.+?)(?:的|\s+)?(标题|副标题|主标题|文案|文字|文本|title|subtitle)$/i);
-  if (!match) return null;
-
-  const container = cleanPart(match[1]);
-  const child = cleanPart(match[2]);
-  if (!container || !child || /^(?:所有|全部|当前|选中|所选)$/i.test(container)) return null;
-  return { container, child };
+function cleanLayerTarget(value) {
+  return cleanPart(value)
+    .replace(/(?:的)?(?:图层)?(?:名称|名字|命名)$/i, '')
+    .trim();
 }
 
 function hasTextColorIntent(raw, target) {
@@ -461,8 +583,14 @@ function hasTextRoleIntent(value) {
   return /\b(title|subtitle|copy|label|text)\b|标题|副标题|主标题|文案|文字|文本/i.test(String(value || ''));
 }
 
+function hasLayerTargetIntent(value) {
+  return /\b(layer|layers|frame|frames|group|groups|component|components|instance|instances|section|sections|icon|icons)\b|图层|画板|框架|分组|组件|实例|区块|图标/i.test(
+    String(value || ''),
+  );
+}
+
 function hasDesignPropertyIntent(value) {
-  return /\b(width|height|size|opacity|radius|color|background|fill|border|stroke|layout|spacing|padding|margin|visible|visibility)\b|宽度|高度|尺寸|大小|透明度|不透明度|圆角|颜色|色值|背景|底色|填充|边框|描边|布局|间距|内边距|外边距|可见|隐藏/i.test(
+  return /\b(width|height|size|opacity|radius|color|background|fill|border|stroke|layout|spacing|padding|margin|visible|visibility|font|typeface|weight|line height|letter spacing|shadow|gradient|blur)\b|宽度|高度|尺寸|大小|透明度|不透明度|圆角|颜色|色值|背景|底色|填充|边框|描边|布局|间距|内边距|外边距|可见|隐藏|字号|字体|字重|行高|字间距|阴影|渐变|模糊/i.test(
     String(value || ''),
   );
 }

@@ -29,6 +29,11 @@ export const TOOL_REGISTRY = [
           type: 'boolean',
           description: 'Set true to replace only occurrences of target inside each matched text layer.',
         },
+        containerTarget: {
+          type: 'string',
+          description:
+            'Optional container phrase when setting a text role inside a named container, such as dialog/modal/card.',
+        },
       },
       ['text'],
     ),

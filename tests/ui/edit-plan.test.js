@@ -37,6 +37,52 @@ describe('createEditPlan', () => {
     });
   });
 
+  it('plans a full text update inside a named container', () => {
+    expect(createEditPlan('将登录弹窗的标题文字改为欢迎回来')).toMatchObject({
+      toolName: 'batch_set_text',
+      args: {
+        target: '标题',
+        containerTarget: '登录弹窗',
+        text: '欢迎回来',
+        replaceOnly: false,
+      },
+    });
+  });
+
+  it('recognizes a container and text role without a possessive delimiter', () => {
+    expect(createEditPlan('把登录弹窗标题改成欢迎回来')).toMatchObject({
+      toolName: 'batch_set_text',
+      args: {
+        target: '标题',
+        containerTarget: '登录弹窗',
+        text: '欢迎回来',
+        replaceOnly: false,
+      },
+    });
+  });
+
+  it('treats an ambiguous English rename as visible text replacement', () => {
+    expect(createEditPlan('rename Sign in to Continue')).toMatchObject({
+      toolName: 'batch_set_text',
+      args: {
+        target: 'Sign in',
+        text: 'Continue',
+        replaceOnly: true,
+      },
+    });
+  });
+
+  it('plans layer rename modes without guessing names', () => {
+    expect(createEditPlan('给所有图标图层名称添加前缀 Icon')).toMatchObject({
+      toolName: 'batch_rename_layers',
+      args: {
+        target: '所有图标',
+        mode: 'prefix',
+        text: 'Icon',
+      },
+    });
+  });
+
   it('plans duplicate count, placement, and layout', () => {
     expect(createEditPlan('复制 2 个登录模块放到右下角纵向排列')).toMatchObject({
       toolName: 'duplicate_layers',

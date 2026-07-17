@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { COMMAND_NAMES, PREVIEW_HANDLER_NAMES } from '../src/main/command-names.js';
 import { COMMANDS } from '../src/main/commands.js';
+import { ALLOWED_ENDPOINT_PATTERNS } from '../src/shared/allowed-endpoints.js';
 import { TOOL_REGISTRY } from '../src/shared/tool-registry.js';
 
 const root = new URL('..', import.meta.url).pathname;
@@ -65,6 +66,7 @@ for (const forbidden of ['vip-brain.qiyi.domain', 'vip-figma-server.qiyi.domain'
 }
 
 assertToolRegistryConsistency();
+assertEndpointAllowlistConsistency();
 
 console.log('Figma Batch AI project check passed.');
 
@@ -98,6 +100,19 @@ function assertToolRegistryConsistency() {
     if (metadata.mutates && (!metadata.confirm || metadata.preview === false)) {
       throw new Error(`Mutating LLM tool must require preview and confirmation: ${metadata.name}`);
     }
+  }
+}
+
+function assertEndpointAllowlistConsistency() {
+  const manifestPatterns = manifest.networkAccess?.allowedDomains || [];
+  assertUnique(manifestPatterns, 'manifest allowed domain');
+  assertUnique(ALLOWED_ENDPOINT_PATTERNS, 'endpoint pattern');
+
+  if (
+    manifestPatterns.length !== ALLOWED_ENDPOINT_PATTERNS.length ||
+    manifestPatterns.some((pattern) => !ALLOWED_ENDPOINT_PATTERNS.includes(pattern))
+  ) {
+    throw new Error('Endpoint patterns must match manifest.networkAccess.allowedDomains.');
   }
 }
 
